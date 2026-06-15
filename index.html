@@ -428,7 +428,8 @@ function simStrat(strategy,extra){let debts=debtList().map(d=>({...d}));if(!debt
 /* ---------- charts ---------- */
 let charts={};
 function mk(id,type,data,opts){if(charts[id])charts[id].destroy();const el=document.getElementById(id);if(!el)return;charts[id]=new Chart(el,{type,data,options:Object.assign({responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CLR.legend,usePointStyle:true,pointStyle:'circle',boxWidth:7,font:{family:'Inter'}}}}},opts)});}
-function axes(){return{x:{ticks:{color:CLR.muted,font:{family:'Inter',size:10},autoSkip:true,maxTicksLimit:16},grid:{color:CLR.grid}},y:{ticks:{color:CLR.muted,font:{family:'Inter',size:10},callback:v=>'S/'+(v/1000).toFixed(0)+'k'},grid:{color:CLR.grid}}};}
+function axes(){return{x:{ticks:{color:CLR.muted,font:{family:'Inter',size:10},autoSkip:true,maxTicksLimit:16},grid:{color:CLR.grid}},y:{beginAtZero:true,ticks:{color:CLR.muted,font:{family:'Inter',size:10},callback:v=>v>=1000?'S/'+(v/1000).toFixed(1)+'k':'S/'+Math.round(v)},grid:{color:CLR.grid}}};}
+function axesSol(){return{x:{ticks:{color:CLR.muted,font:{family:'Inter',size:10},autoSkip:true,maxTicksLimit:16},grid:{color:CLR.grid}},y:{beginAtZero:true,ticks:{color:CLR.muted,font:{family:'Inter',size:10},callback:v=>'S/ '+Math.round(v)},grid:{color:CLR.grid}}};}
 const daysIn=(y,m)=>new Date(y,m,0).getDate();
 
 /* ---------- RESUMEN ---------- */
@@ -454,8 +455,8 @@ function renderDash(){
  if(tasa<0&&I>0)a+=`<div class="note warn"><span class="k">Atención</span>Este mes gastas más de lo que ingresas. Revisa Gustos y Necesidades.</div>`;
  const diasT=isCur?new Date().getDate():dimN,proy=diasT>0?gReal/diasT*dimN:gReal;
  if(isCur&&gReal>0)a+=`<div class="note"><span class="k">Proyección</span>A este ritmo cerrarás ${mesNom} con un gasto de ~<b>${fmt(proy)}</b>${I>0?' ('+Math.round(proy/I*100)+'% de tu ingreso)':''}.</div>`;
- const sobre=S.categorias.map(c=>{const lm=effLimite(c,y,mn),g=S.tx.filter(t=>t.tipo==='Gasto'&&t.catId===c.id&&inMonth(t,y,mn)).reduce((s,t)=>s+(+t.monto||0),0);return {n:c.nombre,p:lm>0?g/lm:0};}).filter(x=>x.p>=0.8).map(x=>x.n+' '+Math.round(x.p*100)+'%');
- if(sobre.length)a+=`<div class="note warn"><span class="k">Límites</span>Cerca o sobre el límite: <b>${sobre.join(' · ')}</b>.</div>`;
+ const sobre=S.categorias.filter(c=>c.auto!=='deuda').map(c=>{const lm=effLimite(c,y,mn),g=S.tx.filter(t=>t.tipo==='Gasto'&&t.catId===c.id&&inMonth(t,y,mn)).reduce((s,t)=>s+(+t.monto||0),0);return {n:c.nombre,p:lm>0?g/lm:0,ex:g-lm};}).filter(x=>x.p>1.02).map(x=>x.n+' '+Math.round(x.p*100)+'% (+'+fmt(x.ex)+')');
+ if(sobre.length)a+=`<div class="note warn"><span class="k">Excedido</span>Te pasaste del límite en: <b>${sobre.join(' · ')}</b>.</div>`;
  const hd=new Date(new Date().toDateString());const px=S.tarjetas.map(c=>{const dd=+c.dia||15;let due=new Date(hd.getFullYear(),hd.getMonth(),dd);if(due<hd)due=new Date(hd.getFullYear(),hd.getMonth()+1,dd);return {n:c.nombre,dias:Math.round((due-hd)/86400000)};}).filter(x=>x.dias<=5);
  if(px.length)a+=`<div class="note"><span class="k">Recordatorio</span>${px.map(p=>'Pago de '+p.n+' '+(p.dias===0?'vence hoy':'en '+p.dias+' día'+(p.dias>1?'s':''))).join(' · ')}.</div>`;
  const pend=recurrentesPendientes();
@@ -472,7 +473,7 @@ function renderDash(){
  // daily
  const dl=[],dd=[];for(let d=1;d<=dimN;d++){dl.push(d);dd.push(gastoDia(`${y}-${pad(mn)}-${pad(d)}`));}
  const limDia=I*0.8/dimN;
- mk('cDay','bar',{labels:dl,datasets:[{label:'Gasto',data:dd,backgroundColor:CLR.navy,borderRadius:3},{type:'line',label:'Ritmo diario sugerido',data:dl.map(()=>limDia),borderColor:CLR.amber,borderDash:[5,4],pointRadius:0,borderWidth:1.5}]},{scales:axes()});
+ mk('cDay','bar',{labels:dl,datasets:[{label:'Gasto del día',data:dd,backgroundColor:CLR.navy,borderRadius:3},{type:'line',label:'Límite diario (gasto del mes ÷ días)',data:dl.map(()=>limDia),borderColor:CLR.amber,borderDash:[5,4],pointRadius:0,borderWidth:1.5}]},{scales:axesSol()});
  // pie by category
  const byCat={};S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{const c=catById(t.catId);const nm=c?c.nombre:'Otros';byCat[nm]=(byCat[nm]||0)+(+t.monto||0);});
  const pl=Object.keys(byCat),pd=pl.map(k=>byCat[k]);
