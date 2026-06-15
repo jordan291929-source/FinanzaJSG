@@ -135,7 +135,7 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
     <div class="box"><h3>Gasto diario del mes</h3><canvas id="cDay"></canvas></div>
     <div class="box"><h3>Distribución del gasto (mes)</h3><canvas id="cPie"></canvas></div>
   </div>
-  <div class="box"><h3>Ingresos vs. gastos por mes</h3><canvas id="cMon"></canvas></div>
+  <div class="box"><h3>Flujo de caja por mes (entra vs. sale)</h3><canvas id="cMon"></canvas></div>
 </section>
 
 <section id="mov" class="view">
@@ -253,11 +253,12 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
   </div>
   <div class="hint" style="margin:-4px 2px 0">Marca la casilla solo si es un préstamo <b>nuevo</b> y acabas de recibir el dinero (sube tu caja). Para deudas que ya tenías, déjala sin marcar.</div>
   <div class="row-form" style="margin-top:14px">
-    <div class="field"><label>Registrar pago hoy · deuda</label><select id="payCard"></select></div>
+    <div class="field"><label>Registrar pago hoy · deuda</label><select id="payCard" onchange="onPayCardChange()"></select></div>
+    <div class="field" id="payCompraWrap" style="display:none"><label>Compra específica (opcional)</label><select id="payCompra"></select></div>
     <div class="field"><label>Fecha</label><input type="date" id="payFecha"></div>
     <div class="field"><label>Monto (S/)</label><input type="number" id="payMonto" step="10"></div>
     <button onclick="addCardPayment()">Registrar pago</button>
-    <span class="hint" style="align-self:center;max-width:320px">Lo anota como movimiento (Pago de deudas) y avanza tu pago del mes. En tarjetas, además reduce el saldo (primero la de mayor TEA).</span>
+    <span class="hint" style="align-self:center;max-width:320px">Lo anota como movimiento (Pago de deudas) y avanza tu pago del mes. El saldo de la tarjeta baja solo; si anulas el pago, vuelve a subir.</span>
   </div>
 </section>
 
@@ -390,9 +391,12 @@ const monthNum=(y,m)=>y*12+(m-1);
 function numToKey(n){return Math.floor(n/12)+'-'+pad(n%12+1);}
 function keyLbl(k){const[y,m]=k.split('-');return MESL[+m-1]+' '+y;}
 function cuotaOf(p){const r=mRate(+p.tea||0),n=Math.max(1,+p.n||1),s=+p.saldo||0;return p.tea>0?s*r/(1-Math.pow(1+r,-n)):s/n;}
-function consumidoCard(c){return (c.compras||[]).reduce((a,p)=>a+(+p.saldo||0),0);}
+function pagosCompra(cardId,compraId){return S.tx.filter(t=>t.payCardId===cardId&&t.payCompraId===compraId).reduce((a,t)=>a+(+t.monto||0),0);}
+function saldoPendienteCompra(cardId,p){return Math.max(0,(+p.saldo||0)-pagosCompra(cardId,p.id));}
+function pagosGenerales(c){const ids=(c.compras||[]).map(p=>p.id);return S.tx.filter(t=>t.payCardId===c.id&&(!t.payCompraId||!ids.includes(t.payCompraId))).reduce((a,t)=>a+(+t.monto||0),0);}
+function consumidoCard(c){let tot=(c.compras||[]).reduce((a,p)=>a+saldoPendienteCompra(c.id,p),0);return Math.max(0,tot-pagosGenerales(c));}
 function interesCard(c){return (c.compras||[]).reduce((a,p)=>a+Math.max(0,cuotaOf(p)*Math.max(1,+p.n||1)-(+p.saldo||0)),0);}
-function cardPayoff(c){let e=0;(c.compras||[]).forEach(p=>{if((+p.saldo||0)>0)e=Math.max(e,monthNum(p.startY,p.startM)+Math.max(1,+p.n||1)-1);});return e;}
+function cardPayoff(c){let e=0;(c.compras||[]).forEach(p=>{if(saldoPendienteCompra(c.id,p)>0)e=Math.max(e,monthNum(p.startY,p.startM)+Math.max(1,+p.n||1)-1);});return e;}
 function cardPayMonth(c,y,mn){const kn=monthNum(y,mn);let pay=0;(c.compras||[]).forEach(p=>{const sn=monthNum(p.startY,p.startM);if(kn>=sn&&kn<sn+Math.max(1,+p.n||1))pay+=cuotaOf(p);});return pay;}
 function loanRem(l){const r=impliedRate(l.monto,l.cuota,l.meses);let bal=+l.monto||0;const now=new Date(),sn=monthNum(l.startY,l.startM),cn=monthNum(now.getFullYear(),now.getMonth()+1);for(let k=sn;k<cn;k++){if(bal<=0)break;bal+=bal*r;bal-=Math.min(l.cuota,bal);}return Math.max(0,bal);}
 function loanPayoff(l){const r=impliedRate(l.monto,l.cuota,l.meses);let bal=+l.monto||0,k=monthNum(l.startY,l.startM);while(bal>0.01&&k<monthNum(2100,1)){bal+=bal*r;bal-=Math.min(l.cuota,bal);if(bal<=0.01)return k;k++;}return k;}
@@ -408,7 +412,7 @@ function cashOutMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn
 function ingresoRealMes(y,mn){return S.tx.filter(t=>t.tipo==='Ingreso'&&inMonth(t,y,mn)).reduce((a,b)=>a+(+b.monto||0),0);}
 function saldoHasta(y,mn){const end=monthNum(y,mn);let s=+S.cfg.saldoIni||0;S.tx.forEach(t=>{const d=new Date(t.fecha+'T00:00');if(monthNum(d.getFullYear(),d.getMonth()+1)<=end){if(t.tipo==='Ingreso')s+=+t.monto||0;else if(!t.cardId)s-=+t.monto||0;}});return s;}
 function bucketReal(y,mn){const o={Necesidad:0,Gusto:0,Ahorro:0};S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{const c=catById(t.catId);const bk=c?c.bucket:'Gusto';if(o[bk]!==undefined)o[bk]+=(+t.monto||0);});return o;}
-function gastoDia(dk){return S.tx.filter(t=>t.tipo==='Gasto'&&t.fecha===dk).reduce((a,b)=>a+(+b.monto||0),0);}
+function gastoDia(dk){return S.tx.filter(t=>t.tipo==='Gasto'&&t.fecha===dk&&!esDeuda(t)).reduce((a,b)=>a+(+b.monto||0),0);}
 
 /* ---------- estrategia de deuda ---------- */
 function debtList(){const arr=[];
@@ -481,8 +485,8 @@ function renderDash(){
  // monthly real
  const set=new Set(S.tx.map(t=>t.fecha.slice(0,7)));set.add(mv);const ms=[...set].sort().slice(-12);
  mk('cMon','bar',{labels:ms.map(k=>{const[a,b]=k.split('-');return MESL[+b-1]+' '+a.slice(2);}),datasets:[
-  {label:'Ingresos',data:ms.map(k=>{const[a,b]=k.split('-').map(Number);return ingresoRealMes(a,b);}),backgroundColor:CLR.pos,borderRadius:3},
-  {label:'Gastos',data:ms.map(k=>{const[a,b]=k.split('-').map(Number);return gastoMes(a,b);}),backgroundColor:CLR.neg,borderRadius:3}]},{scales:axes()});
+  {label:'Ingresos (entra)',data:ms.map(k=>{const[a,b]=k.split('-').map(Number);return ingresoRealMes(a,b);}),backgroundColor:CLR.pos,borderRadius:3},
+  {label:'Egresos (sale de caja)',data:ms.map(k=>{const[a,b]=k.split('-').map(Number);return cashOutMes(a,b);}),backgroundColor:CLR.neg,borderRadius:3}]},{scales:axes()});
 }
 
 /* ---------- MOVIMIENTOS ---------- */
@@ -649,7 +653,7 @@ function renderDeu(){
  const tarjOpts=S.tarjetas.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('')||'<option value="">(sin tarjetas)</option>';
  document.getElementById('cpCard').innerHTML=tarjOpts;
  const payOpts=S.tarjetas.map(c=>`<option value="c:${c.id}">Tarjeta · ${c.nombre}</option>`).join('')+S.loans.map(l=>`<option value="l:${l.id}">Préstamo · ${l.nombre}</option>`).join('');
- document.getElementById('payCard').innerHTML=payOpts||'<option value="">(sin deudas)</option>';
+ document.getElementById('payCard').innerHTML=payOpts||'<option value="">(sin deudas)</option>';onPayCardChange();
  const lc=document.getElementById('lnCuenta');if(lc)lc.innerHTML=(S.cuentas||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
  let cb='';S.tarjetas.forEach(c=>(c.compras||[]).forEach(p=>{const end=monthNum(p.startY,p.startM)+Math.max(1,+p.n||1)-1;
   cb+=`<tr><td class="lft">${c.nombre}</td><td class="lft"><input class="cell" style="width:140px;text-align:left" value="${p.desc||''}" onchange="editCompra(${c.id},${p.id},'desc',this.value)"></td>
@@ -688,13 +692,18 @@ function addLoan(){const nombre=document.getElementById('lnNombre').value||'Pré
 function editLoan(id,f,v){const l=S.loans.find(x=>x.id===id);if(!l)return;if(['monto','cuota','meses','dia'].includes(f))l[f]=parseFloat(v)||0;else l[f]=v;save();}
 function editLoanStart(id,v){const l=S.loans.find(x=>x.id===id);if(!l||!v)return;const[y,m]=v.split('-').map(Number);l.startY=y;l.startM=m;save();}
 function delLoan(id){if(confirm('¿Borrar préstamo? (si registró un ingreso de financiamiento, también se quita)')){S.loans=S.loans.filter(x=>x.id!==id);S.tx=S.tx.filter(t=>t.loanId!==id);save();}}
+function onPayCardChange(){const v=document.getElementById('payCard').value||'';const w=document.getElementById('payCompraWrap'),sel=document.getElementById('payCompra');
+ if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));const comp=(c&&c.compras)||[];
+  sel.innerHTML='<option value="">Toda la tarjeta</option>'+comp.map(p=>`<option value="${p.id}">${p.desc||'Compra'} — pendiente ${fmt(saldoPendienteCompra(c.id,p))}</option>`).join('');
+  w.style.display='flex';}else{w.style.display='none';}}
 function addCardPayment(){const v=document.getElementById('payCard').value,f=document.getElementById('payFecha').value,mo=parseFloat(document.getElementById('payMonto').value);
  if(!v||!f||!mo){alert('Elige deuda, fecha y monto');return;}
- const tipo=v.split(':')[0],id=+v.split(':')[1];let nombre='';
- if(tipo==='c'){const c=S.tarjetas.find(x=>x.id===id);if(!c)return;nombre=c.nombre;let rest=mo;(c.compras||[]).slice().sort((a,b)=>(b.tea||0)-(a.tea||0)).forEach(p=>{if(rest<=0)return;const cut=Math.min(rest,+p.saldo||0);p.saldo=(+p.saldo||0)-cut;rest-=cut;});}
- else{const l=S.loans.find(x=>x.id===id);if(!l)return;nombre=l.nombre;}
+ const tipo=v.split(':')[0],id=+v.split(':')[1];let nombre='',extra={};
+ if(tipo==='c'){const c=S.tarjetas.find(x=>x.id===id);if(!c)return;nombre=c.nombre;extra.payCardId=id;
+  const cp=document.getElementById('payCompra').value;if(cp){const p=(c.compras||[]).find(x=>x.id===+cp);if(p){extra.payCompraId=+cp;nombre=c.nombre+' · '+(p.desc||'compra');}}}
+ else{const l=S.loans.find(x=>x.id===id);if(!l)return;nombre=l.nombre;extra.payLoanId=id;}
  const cat=S.categorias.find(x=>x.auto==='deuda')||S.categorias.find(x=>x.nombre==='Pago de deudas');
- S.tx.push({id:newId(),fecha:f,tipo:'Gasto',catId:cat?cat.id:null,concepto:'Pago '+nombre,monto:mo});S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));
+ S.tx.push(Object.assign({id:newId(),fecha:f,tipo:'Gasto',catId:cat?cat.id:null,concepto:'Pago '+nombre,monto:mo},extra));S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));
  document.getElementById('payMonto').value='';save();}
 
 /* ---------- ESTADO DE CUENTA (EECC) ---------- */
