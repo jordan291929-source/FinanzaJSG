@@ -83,26 +83,28 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
 .glist .g{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm)}
 .glist .gt{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}.glist .gn{font-weight:600;font-size:14px}
 @media(max-width:640px){
- header{padding:0 14px}
- .brand{padding:9px 0;gap:9px}
- .brand .logo{width:34px;height:34px;border-radius:9px;font-size:12px}
- .brand h1{font-size:14.5px}.brand p{font-size:11px}
+ header{padding:0 13px}
+ .brand{padding:8px 0;gap:9px}
+ .brand .logo{width:33px;height:33px;border-radius:9px;font-size:11.5px}
+ .brand h1{font-size:14px}.brand p{font-size:11px}
  .tabs{width:100%;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:0;scrollbar-width:none;border-top:1px solid var(--line)}
  .tabs::-webkit-scrollbar{display:none}
- .tab{padding:11px 13px;white-space:nowrap;font-size:13px}
- main{padding:16px 12px 60px}
- .cards{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
- .card{padding:13px 14px}.card .val{font-size:20px}.card .lbl{font-size:10px}
- .box{padding:15px;border-radius:12px}.box h3{font-size:12px}
- .grid2{gap:12px}.bgrid{grid-template-columns:1fr}.cfg-grid{grid-template-columns:1fr}.hoywrap{grid-template-columns:1fr}
- .row-form{padding:14px;gap:11px}
- .row-form .field{flex:1 1 100%}
- .row-form .field input,.row-form .field select{width:100%!important}
- .row-form>button{width:100%}
- .selrow{gap:8px}.selrow input,.selrow select{flex:1 1 130px}
- th,td{padding:7px 8px;font-size:12px}
- .cal{gap:4px}.day{border-radius:8px}.day .dn{font-size:10px}.day .amt{font-size:8px}
- canvas{max-height:240px}
+ .tab{padding:10px 13px;white-space:nowrap;font-size:13px}
+ main{padding:14px 11px 56px}
+ .note{padding:11px 13px;font-size:12.5px;line-height:1.5;margin-bottom:12px}
+ .cards{grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+ .card{padding:12px 13px}.card .val{font-size:19px;margin-top:5px}.card .lbl{font-size:9.5px}.card .sub{font-size:11px}
+ .box{padding:14px;border-radius:12px;margin-bottom:12px}.box h3{font-size:11.5px;padding-bottom:10px;margin-bottom:12px}
+ .grid2{gap:11px}.bgrid{grid-template-columns:1fr;gap:10px}.cfg-grid{grid-template-columns:1fr}.hoywrap{grid-template-columns:1fr;gap:11px}
+ .row-form{padding:13px;gap:9px}
+ .row-form .field{flex:1 1 calc(50% - 5px);min-width:0}
+ .field{gap:4px}.field label{font-size:9.5px}
+ .row-form .field input,.row-form .field select{width:100%}
+ .row-form>button{width:100%;margin-top:2px}
+ .selrow{gap:8px}.selrow input,.selrow select{flex:1 1 120px}
+ th,td{padding:6px 8px;font-size:12px}
+ .cal{gap:4px}.day{border-radius:7px}.day .dn{font-size:10px}.day .amt{font-size:8px}
+ canvas{max-height:230px}
  .row-form input,.row-form select,.selrow input,.selrow select,.field input,.field select{font-size:16px}
 }
 </style>
@@ -504,7 +506,7 @@ function delMov(id){const t=S.tx.find(x=>x.id===id);if(t&&t.cardId&&t.compraId)r
 function quickFav(id){const fv=(S.favoritos||[]).find(x=>x.id===id);if(!fv)return;S.tx.push({id:newId(),fecha:keyOf(new Date()),tipo:'Gasto',catId:fv.catId,cuentaId:fv.cuentaId||null,concepto:fv.concepto,monto:+fv.monto||0});S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));save();}
 function renderMov(){
  const opts=catOptions();['mCat','fvCat','rcCat'].forEach(id=>{const e=document.getElementById(id);if(e){const cur=e.value;e.innerHTML=opts;if(cur)e.value=cur;}});
- document.getElementById('mCuenta').innerHTML=ctaOptions();
+ document.getElementById('mCuenta').innerHTML=ctaOptions();if(!editId)toggleCredito();
  const mvCat=document.getElementById('mvCat');if(mvCat){const cur=mvCat.value;mvCat.innerHTML='<option value="">Toda categoría</option>'+opts;mvCat.value=cur;}
  updateConceptSugs();
  document.getElementById('favChips').innerHTML=(S.favoritos||[]).map(fv=>`<button class="ghost" style="padding:7px 13px" onclick="quickFav(${fv.id})">+ ${fv.concepto} · ${fmt(fv.monto)}</button>`).join('')||'<span class="hint">Agrega favoritos abajo para registrar en 1 toque.</span>';
