@@ -239,7 +239,7 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
   <div class="tablewrap" style="margin-bottom:8px"><table><thead><tr><th class="lft">Tarjeta</th><th class="lft">Compra</th><th>Saldo</th><th>Cuotas</th><th>TEA %</th><th>Cuota/mes</th><th class="lft">Inicio</th><th>Termina</th><th></th></tr></thead><tbody id="compraBody"></tbody></table></div>
 
   <div class="selrow" style="margin-top:16px"><b class="lft">Préstamos</b><span class="hint">Cuota fija. La TEA se calcula sola desde monto, cuota y plazo.</span></div>
-  <div class="tablewrap" style="margin-bottom:8px"><table><thead><tr><th class="lft">Préstamo</th><th>Monto</th><th>Cuota/mes</th><th>Plazo</th><th class="lft">Inicio</th><th>TEA calc.</th><th>Se libera</th><th>Interés</th><th></th></tr></thead><tbody id="loanBody"></tbody></table></div>
+  <div class="tablewrap" style="margin-bottom:8px"><table><thead><tr><th class="lft">Préstamo</th><th>Monto</th><th>Cuota/mes</th><th>Plazo</th><th class="lft">Inicio</th><th>TEA calc.</th><th>Pagadas</th><th>Saldo</th><th>Se libera</th><th>Interés</th><th></th></tr></thead><tbody id="loanBody"></tbody></table></div>
   <div class="row-form" style="margin-top:8px">
     <div class="field"><label>Préstamo · nombre</label><input type="text" id="lnNombre" placeholder="Ej. Mibanco"></div>
     <div class="field"><label>Monto</label><input type="number" id="lnMonto" step="100"></div>
@@ -254,7 +254,7 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
   <div class="hint" style="margin:-4px 2px 0">Marca la casilla solo si es un préstamo <b>nuevo</b> y acabas de recibir el dinero (sube tu caja). Para deudas que ya tenías, déjala sin marcar.</div>
   <div class="row-form" style="margin-top:14px">
     <div class="field"><label>Registrar pago hoy · deuda</label><select id="payCard" onchange="onPayCardChange()"></select></div>
-    <div class="field" id="payCompraWrap" style="display:none"><label>Compra específica (opcional)</label><select id="payCompra"></select></div>
+    <div class="field" id="payCompraWrap" style="display:none"><label>Compra específica (opcional)</label><select id="payCompra" onchange="fillPayMonto()"></select></div>
     <div class="field"><label>Fecha</label><input type="date" id="payFecha"></div>
     <div class="field"><label>Monto (S/)</label><input type="number" id="payMonto" step="10"></div>
     <button onclick="addCardPayment()">Registrar pago</button>
@@ -403,7 +403,9 @@ function paidCardMes(c,y,mn){return S.tx.filter(t=>t.payCardId===c.id&&inMonth(t
 function paidLoanMes(l,y,mn){return S.tx.filter(t=>t.payLoanId===l.id&&inMonth(t,y,mn)).reduce((a,t)=>a+(+t.monto||0),0);}
 function pagadoCuotasMes(y,mn){let p=0;S.tarjetas.forEach(c=>p+=Math.min(paidCardMes(c,y,mn),cardPayMonth(c,y,mn)));S.loans.forEach(l=>p+=Math.min(paidLoanMes(l,y,mn),loanCuotaMes(l,y,mn)));return p;}
 function faltaPorDeuda(y,mn){const r=[];S.tarjetas.forEach(c=>{const f=cardPayMonth(c,y,mn)-Math.min(paidCardMes(c,y,mn),cardPayMonth(c,y,mn));if(f>0.5)r.push(c.nombre+' '+fmt(f));});S.loans.forEach(l=>{const f=loanCuotaMes(l,y,mn)-Math.min(paidLoanMes(l,y,mn),loanCuotaMes(l,y,mn));if(f>0.5)r.push(l.nombre+' '+fmt(f));});return r;}
-function loanRem(l){const r=impliedRate(l.monto,l.cuota,l.meses);let bal=+l.monto||0;const now=new Date(),sn=monthNum(l.startY,l.startM),cn=monthNum(now.getFullYear(),now.getMonth()+1);for(let k=sn;k<cn;k++){if(bal<=0)break;bal+=bal*r;bal-=Math.min(l.cuota,bal);}return Math.max(0,bal);}
+function loanPaidTot(l){return S.tx.filter(t=>t.payLoanId===l.id).reduce((a,t)=>a+(+t.monto||0),0);}
+function loanCuotasPagadas(l){return Math.min(+l.meses||0,Math.round(loanPaidTot(l)/((+l.cuota)||1)));}
+function loanRem(l){const r=impliedRate(l.monto,l.cuota,l.meses);const k=loanCuotasPagadas(l);let bal=+l.monto||0;for(let i=0;i<k;i++){bal+=bal*r;bal-=Math.min(l.cuota,bal);}return Math.max(0,bal);}
 function loanPayoff(l){const r=impliedRate(l.monto,l.cuota,l.meses);let bal=+l.monto||0,k=monthNum(l.startY,l.startM);while(bal>0.01&&k<monthNum(2100,1)){bal+=bal*r;bal-=Math.min(l.cuota,bal);if(bal<=0.01)return k;k++;}return k;}
 function loanInteres(l){return Math.max(0,(+l.cuota||0)*(+l.meses||0)-(+l.monto||0));}
 function deudaTotal(){return S.tarjetas.reduce((a,c)=>a+consumidoCard(c),0)+S.loans.reduce((a,l)=>a+loanRem(l),0);}
@@ -646,11 +648,13 @@ function renderDeu(){
    <div class="note ok"><span class="k">Recomendación</span>La <b>avalancha</b> minimiza intereses (ahorras ${fmt(bn.interes-av.interes)} vs. bola de nieve). La bola de nieve da más motivación al cerrar deudas pequeñas antes. Orden con tu estrategia (${S.estrategia==='avalancha'?'avalancha':'bola de nieve'}): <b>${sel.orden.join(' → ')}</b>. Con S/${extra} extra al mes quedas libre de deudas en <b>${sel.meses} meses</b>.</div>`;}
  // tarjetas
  document.getElementById('cardBody').innerHTML=S.tarjetas.map(c=>{const cons=consumidoCard(c),disp=(+c.linea||0)-cons,pm=cardPayMonth(c,cy,cm),po=cardPayoff(c);
+  const paidC=paidCardMes(c,cy,cm),cubC=Math.min(paidC,pm),faltaC=Math.max(0,pm-cubC);
+  const pmCell=pm<=0.5?'—':(faltaC<=0.5?`${fmt(pm)}<div class="hint" style="color:var(--pos)">pagado ✓</div>`:`${fmt(pm)}<div class="hint">${cubC>0.5?'pagado '+fmt(cubC)+' · ':''}falta ${fmt(faltaC)}</div>`);
   return `<tr><td class="lft"><input class="cell" style="width:130px;text-align:left" value="${c.nombre}" onchange="editCard(${c.id},'nombre',this.value)"></td>
    <td><input class="cell" type="number" value="${c.linea||0}" onchange="editCard(${c.id},'linea',this.value)"></td>
    <td class="calc">${fmt(cons)}</td><td class="calc" style="${disp<0?'color:var(--neg)':''}">${fmt(disp)}</td>
    <td class="lft"><input class="cell" style="width:42px" type="number" value="${c.dia||15}" onchange="editCard(${c.id},'dia',this.value)"></td>
-   <td class="calc">${fmt(pm)}</td>
+   <td class="calc">${pmCell}</td>
    <td><input class="cell" type="number" value="${c.pagoMin||0}" onchange="editCard(${c.id},'pagoMin',this.value)"></td>
    <td>${po>0?keyLbl(numToKey(po)):'—'}</td><td class="neg">${fmt(interesCard(c))}</td>
    <td><button class="del" onclick="delCard(${c.id})">✕</button></td></tr>`;}).join('')||'<tr><td colspan="10" class="empty">Sin tarjetas.</td></tr>';
@@ -667,14 +671,16 @@ function renderDeu(){
    <td class="calc">${fmt(cuotaOf(p))}</td><td class="lft"><input type="month" value="${p.startY}-${pad(p.startM)}" onchange="editCompra(${c.id},${p.id},'inicio',this.value)" style="padding:3px 5px;font-size:12px"></td>
    <td>${keyLbl(numToKey(end))}</td><td><button class="del" onclick="delCompra(${c.id},${p.id})">✕</button></td></tr>`;}));
  document.getElementById('compraBody').innerHTML=cb||'<tr><td colspan="9" class="empty">Sin compras en cuotas.</td></tr>';
- document.getElementById('loanBody').innerHTML=S.loans.map(l=>{const tea=Math.pow(1+impliedRate(l.monto,l.cuota,l.meses),12)-1;
+ document.getElementById('loanBody').innerHTML=S.loans.map(l=>{const tea=Math.pow(1+impliedRate(l.monto,l.cuota,l.meses),12)-1;const kp=loanCuotasPagadas(l),rem=loanRem(l);
   return `<tr><td class="lft"><input class="cell" style="width:130px;text-align:left" value="${l.nombre}" onchange="editLoan(${l.id},'nombre',this.value)"></td>
    <td><input class="cell" type="number" value="${l.monto}" onchange="editLoan(${l.id},'monto',this.value)"></td>
    <td><input class="cell" type="number" value="${l.cuota}" onchange="editLoan(${l.id},'cuota',this.value)"></td>
    <td><input class="cell" style="width:42px" type="number" value="${l.meses}" onchange="editLoan(${l.id},'meses',this.value)"></td>
    <td class="lft"><input type="month" value="${l.startY}-${pad(l.startM)}" onchange="editLoanStart(${l.id},this.value)" style="padding:3px 5px;font-size:12px"></td>
-   <td class="calc">${(tea*100).toFixed(1)}%</td><td>${keyLbl(numToKey(loanPayoff(l)))}</td><td class="neg">${fmt(loanInteres(l))}</td>
-   <td><button class="del" onclick="delLoan(${l.id})">✕</button></td></tr>`;}).join('')||'<tr><td colspan="9" class="empty">Sin préstamos.</td></tr>';
+   <td class="calc">${(tea*100).toFixed(1)}%</td>
+   <td class="calc">${kp}/${l.meses}</td><td class="calc" style="${rem<=0.5?'color:var(--pos)':''}">${rem<=0.5?'Pagado ✓':fmt(rem)}</td>
+   <td>${keyLbl(numToKey(loanPayoff(l)))}</td><td class="neg">${fmt(loanInteres(l))}</td>
+   <td><button class="del" onclick="delLoan(${l.id})">✕</button></td></tr>`;}).join('')||'<tr><td colspan="11" class="empty">Sin préstamos.</td></tr>';
  const todK=keyOf(new Date()).slice(0,7);
  const al=document.getElementById('dtiAlert');al.innerHTML=dti>0.4?`<div class="note warn"><span class="k">Sobreendeudamiento</span>Tus cuotas son el ${Math.round(dti*100)}% de tu ingreso. Prioriza reducir deuda antes de nuevos créditos.</div>`:'';
 }
@@ -699,7 +705,11 @@ function delLoan(id){if(confirm('¿Borrar préstamo? (si registró un ingreso de
 function onPayCardChange(){const v=document.getElementById('payCard').value||'';const w=document.getElementById('payCompraWrap'),sel=document.getElementById('payCompra');
  if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));const comp=((c&&c.compras)||[]).filter(p=>saldoPendienteCompra(c.id,p)>0.005);
   sel.innerHTML='<option value="">Toda la tarjeta</option>'+comp.map(p=>`<option value="${p.id}">${p.desc||'Compra'} — pendiente ${fmt(saldoPendienteCompra(c.id,p))}</option>`).join('');
-  w.style.display='flex';}else{w.style.display='none';}}
+  w.style.display='flex';}else{w.style.display='none';}fillPayMonto();}
+function fillPayMonto(){const v=document.getElementById('payCard').value||'';const mEl=document.getElementById('payMonto');if(!mEl)return;const now=new Date(),y=now.getFullYear(),mn=now.getMonth()+1;let amt=0;
+ if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));if(c){const cp=document.getElementById('payCompra').value;if(cp){const p=(c.compras||[]).find(x=>x.id===+cp);if(p)amt=saldoPendienteCompra(c.id,p);}else{amt=Math.max(0,cardPayMonth(c,y,mn)-paidCardMes(c,y,mn));if(amt<=0.5)amt=consumidoCard(c);}}}
+ else if(v.startsWith('l:')){const l=S.loans.find(x=>x.id===+v.slice(2));if(l){amt=Math.max(0,loanCuotaMes(l,y,mn)-paidLoanMes(l,y,mn));if(amt<=0.5)amt=+l.cuota||0;}}
+ if(amt>0.005)mEl.value=Math.round(amt*100)/100;}
 function addCardPayment(){const v=document.getElementById('payCard').value,f=document.getElementById('payFecha').value,mo=parseFloat(document.getElementById('payMonto').value);
  if(!v||!f||!mo){alert('Elige deuda, fecha y monto');return;}
  const tipo=v.split(':')[0],id=+v.split(':')[1];let nombre='',extra={};
