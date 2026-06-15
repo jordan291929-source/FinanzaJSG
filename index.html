@@ -398,6 +398,11 @@ function consumidoCard(c){let tot=(c.compras||[]).reduce((a,p)=>a+saldoPendiente
 function interesCard(c){return (c.compras||[]).reduce((a,p)=>a+Math.max(0,cuotaOf(p)*Math.max(1,+p.n||1)-(+p.saldo||0)),0);}
 function cardPayoff(c){let e=0;(c.compras||[]).forEach(p=>{if(saldoPendienteCompra(c.id,p)>0)e=Math.max(e,monthNum(p.startY,p.startM)+Math.max(1,+p.n||1)-1);});return e;}
 function cardPayMonth(c,y,mn){const kn=monthNum(y,mn);let pay=0;(c.compras||[]).forEach(p=>{const sn=monthNum(p.startY,p.startM);if(kn>=sn&&kn<sn+Math.max(1,+p.n||1))pay+=cuotaOf(p);});return pay;}
+function loanCuotaMes(l,y,mn){const sn=monthNum(l.startY,l.startM),kn=monthNum(y,mn);return (kn>=sn&&kn<sn+(+l.meses||0))?(+l.cuota||0):0;}
+function paidCardMes(c,y,mn){return S.tx.filter(t=>t.payCardId===c.id&&inMonth(t,y,mn)).reduce((a,t)=>a+(+t.monto||0),0);}
+function paidLoanMes(l,y,mn){return S.tx.filter(t=>t.payLoanId===l.id&&inMonth(t,y,mn)).reduce((a,t)=>a+(+t.monto||0),0);}
+function pagadoCuotasMes(y,mn){let p=0;S.tarjetas.forEach(c=>p+=Math.min(paidCardMes(c,y,mn),cardPayMonth(c,y,mn)));S.loans.forEach(l=>p+=Math.min(paidLoanMes(l,y,mn),loanCuotaMes(l,y,mn)));return p;}
+function faltaPorDeuda(y,mn){const r=[];S.tarjetas.forEach(c=>{const f=cardPayMonth(c,y,mn)-Math.min(paidCardMes(c,y,mn),cardPayMonth(c,y,mn));if(f>0.5)r.push(c.nombre+' '+fmt(f));});S.loans.forEach(l=>{const f=loanCuotaMes(l,y,mn)-Math.min(paidLoanMes(l,y,mn),loanCuotaMes(l,y,mn));if(f>0.5)r.push(l.nombre+' '+fmt(f));});return r;}
 function loanRem(l){const r=impliedRate(l.monto,l.cuota,l.meses);let bal=+l.monto||0;const now=new Date(),sn=monthNum(l.startY,l.startM),cn=monthNum(now.getFullYear(),now.getMonth()+1);for(let k=sn;k<cn;k++){if(bal<=0)break;bal+=bal*r;bal-=Math.min(l.cuota,bal);}return Math.max(0,bal);}
 function loanPayoff(l){const r=impliedRate(l.monto,l.cuota,l.meses);let bal=+l.monto||0,k=monthNum(l.startY,l.startM);while(bal>0.01&&k<monthNum(2100,1)){bal+=bal*r;bal-=Math.min(l.cuota,bal);if(bal<=0.01)return k;k++;}return k;}
 function loanInteres(l){return Math.max(0,(+l.cuota||0)*(+l.meses||0)-(+l.monto||0));}
@@ -461,7 +466,7 @@ function renderDash(){
  if(isCur&&gReal>0)a+=`<div class="note"><span class="k">Proyección</span>A este ritmo cerrarás ${mesNom} con un gasto de ~<b>${fmt(proy)}</b>${I>0?' ('+Math.round(proy/I*100)+'% de tu ingreso)':''}.</div>`;
  const sobre=S.categorias.filter(c=>c.auto!=='deuda').map(c=>{const lm=effLimite(c,y,mn),g=S.tx.filter(t=>t.tipo==='Gasto'&&t.catId===c.id&&inMonth(t,y,mn)).reduce((s,t)=>s+(+t.monto||0),0);return {n:c.nombre,p:lm>0?g/lm:0,ex:g-lm};}).filter(x=>x.p>1.02).map(x=>x.n+' '+Math.round(x.p*100)+'% (+'+fmt(x.ex)+')');
  if(sobre.length)a+=`<div class="note warn"><span class="k">Excedido</span>Te pasaste del límite en: <b>${sobre.join(' · ')}</b>.</div>`;
- const hd=new Date(new Date().toDateString());const px=S.tarjetas.map(c=>{const dd=+c.dia||15;let due=new Date(hd.getFullYear(),hd.getMonth(),dd);if(due<hd)due=new Date(hd.getFullYear(),hd.getMonth()+1,dd);return {n:c.nombre,dias:Math.round((due-hd)/86400000)};}).filter(x=>x.dias<=5);
+ const hd=new Date(new Date().toDateString());const px=S.tarjetas.filter(c=>{const yy=hd.getFullYear(),mm2=hd.getMonth()+1;return cardPayMonth(c,yy,mm2)-paidCardMes(c,yy,mm2)>0.5;}).map(c=>{const dd=+c.dia||15;let due=new Date(hd.getFullYear(),hd.getMonth(),dd);if(due<hd)due=new Date(hd.getFullYear(),hd.getMonth()+1,dd);return {n:c.nombre,dias:Math.round((due-hd)/86400000)};}).filter(x=>x.dias<=5);
  if(px.length)a+=`<div class="note"><span class="k">Recordatorio</span>${px.map(p=>'Pago de '+p.n+' '+(p.dias===0?'vence hoy':'en '+p.dias+' día'+(p.dias>1?'s':''))).join(' · ')}.</div>`;
  const pend=recurrentesPendientes();
  if(pend.length)a+=`<div class="note"><span class="k">Próximos fijos</span>${pend.map(p=>p.concepto+' '+fmt(p.monto)+' el '+p.dia).join(' · ')} <span class="hint">(se registran solos al llegar su día)</span></div>`;
@@ -620,13 +625,12 @@ function setStrat(s){S.estrategia=s;save();}
 function renderDeu(){
  const I=ingresoMensual();const now=new Date(),cy=now.getFullYear(),cm=now.getMonth()+1;
  const deuda=deudaTotal();const cuotas=cuotasMes(cy,cm);const dti=I>0?cuotas/I:0;
- const catD=S.categorias.find(x=>x.auto==='deuda')||S.categorias.find(x=>x.nombre==='Pago de deudas');
- const pagado=catD?S.tx.filter(t=>t.tipo==='Gasto'&&t.catId===catD.id&&inMonth(t,cy,cm)).reduce((a,b)=>a+(+b.monto),0):0;
+ const pagado=pagadoCuotasMes(cy,cm);const falta=Math.max(0,cuotas-pagado);const ftl=faltaPorDeuda(cy,cm);
  const ppct=cuotas>0?Math.round(pagado/cuotas*100):0;
  document.getElementById('deuKpi').innerHTML=`
   <div class="card"><div class="lbl">Deuda total</div><div class="val ${deuda>0?'neg':'pos'}">${fmt(deuda)}</div><div class="sub">tarjetas + préstamos</div></div>
   <div class="card"><div class="lbl">Cuotas este mes</div><div class="val">${fmt(cuotas)}</div><div class="sub">lo que toca pagar</div></div>
-  <div class="card"><div class="lbl">Pagado del mes</div><div class="val ${pagado>=cuotas&&cuotas>0?'pos':''}">${fmt(pagado)}</div><div class="sub">${ppct}% de las cuotas · falta ${fmt(Math.max(0,cuotas-pagado))}</div></div>
+  <div class="card"><div class="lbl">Pagado del mes</div><div class="val ${falta<=0.5&&cuotas>0?'pos':''}">${fmt(pagado)}</div><div class="sub">${ppct}% de las cuotas · falta ${fmt(falta)}${ftl.length?' ('+ftl.join(' · ')+')':''}</div></div>
   <div class="card"><div class="lbl">Cuota / ingreso</div><div class="val ${dti>0.4?'neg':dti>0.3?'warnc':'pos'}">${Math.round(dti*100)}%</div><div class="sub">saludable < 30-40%</div></div>`;
  document.getElementById('extra').value=S.extra||0;
  document.getElementById('bAval').className='ghost'+(S.estrategia==='avalancha'?' on':'');
@@ -693,7 +697,7 @@ function editLoan(id,f,v){const l=S.loans.find(x=>x.id===id);if(!l)return;if(['m
 function editLoanStart(id,v){const l=S.loans.find(x=>x.id===id);if(!l||!v)return;const[y,m]=v.split('-').map(Number);l.startY=y;l.startM=m;save();}
 function delLoan(id){if(confirm('¿Borrar préstamo? (si registró un ingreso de financiamiento, también se quita)')){S.loans=S.loans.filter(x=>x.id!==id);S.tx=S.tx.filter(t=>t.loanId!==id);save();}}
 function onPayCardChange(){const v=document.getElementById('payCard').value||'';const w=document.getElementById('payCompraWrap'),sel=document.getElementById('payCompra');
- if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));const comp=(c&&c.compras)||[];
+ if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));const comp=((c&&c.compras)||[]).filter(p=>saldoPendienteCompra(c.id,p)>0.005);
   sel.innerHTML='<option value="">Toda la tarjeta</option>'+comp.map(p=>`<option value="${p.id}">${p.desc||'Compra'} — pendiente ${fmt(saldoPendienteCompra(c.id,p))}</option>`).join('');
   w.style.display='flex';}else{w.style.display='none';}}
 function addCardPayment(){const v=document.getElementById('payCard').value,f=document.getElementById('payFecha').value,mo=parseFloat(document.getElementById('payMonto').value);
