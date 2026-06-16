@@ -26,6 +26,7 @@ header{background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(10px
 .brand .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#2c5689,#0d7c8a);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;letter-spacing:.5px;box-shadow:0 3px 9px rgba(13,124,138,.32);flex:0 0 auto}
 .brand h1{font-size:16px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
 .brand p{font-size:12px;color:var(--muted);font-weight:500;margin-top:1px}
+.ver{display:inline-block;vertical-align:middle;font-size:10px;font-weight:600;color:var(--navy);background:var(--navy-soft);border:1px solid var(--line);border-radius:20px;padding:1px 7px;margin-left:6px;letter-spacing:.02em}
 .tabs{display:flex;gap:2px;flex-wrap:wrap;align-self:stretch}
 .tab{padding:0 15px;display:flex;align-items:center;cursor:pointer;color:var(--muted);font-weight:500;font-size:13.5px;border-bottom:2px solid transparent;transition:color .15s,border-color .15s}
 .tab:hover{color:var(--ink)}.tab.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:600}
@@ -112,7 +113,7 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
 </head>
 <body>
 <header>
-  <div class="brand"><div class="logo" id="logoBox">JSG</div><div><h1>Reporte de Finanzas Personal</h1><p id="brandSub"></p></div></div>
+  <div class="brand"><div class="logo" id="logoBox">JSG</div><div><h1>Reporte de Finanzas Personal <span class="ver" id="appVer" title="Versión"></span></h1><p id="brandSub"></p></div></div>
   <nav class="tabs">
     <div class="tab active" data-v="dash">Resumen</div>
     <div class="tab" data-v="mov">Movimientos</div>
@@ -320,6 +321,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
+const APP_VERSION='2.6.0'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -394,9 +396,12 @@ function cuotaOf(p){const r=mRate(+p.tea||0),n=Math.max(1,+p.n||1),s=+p.saldo||0
 function pagosCompra(cardId,compraId){return S.tx.filter(t=>t.payCardId===cardId&&t.payCompraId===compraId).reduce((a,t)=>a+(+t.monto||0),0);}
 function saldoPendienteCompra(cardId,p){return Math.max(0,(+p.saldo||0)-pagosCompra(cardId,p.id));}
 function pagosGenerales(c){const ids=(c.compras||[]).map(p=>p.id);return S.tx.filter(t=>t.payCardId===c.id&&(!t.payCompraId||!ids.includes(t.payCompraId))).reduce((a,t)=>a+(+t.monto||0),0);}
-function consumidoCard(c){let tot=(c.compras||[]).reduce((a,p)=>a+saldoPendienteCompra(c.id,p),0);return Math.max(0,tot-pagosGenerales(c));}
+function comprasState(c){const list=(c.compras||[]).map(p=>({id:p.id,p,pend:saldoPendienteCompra(c.id,p)}));let gen=pagosGenerales(c);
+ list.slice().sort((a,b)=>(monthNum(a.p.startY,a.p.startM)-monthNum(b.p.startY,b.p.startM))).forEach(it=>{if(gen<=0)return;const cut=Math.min(gen,it.pend);it.pend-=cut;gen-=cut;});return list;}
+function pendCompra(c,p){const s=comprasState(c).find(x=>x.id===p.id);return s?Math.max(0,s.pend):Math.max(0,(+p.saldo||0));}
+function consumidoCard(c){return comprasState(c).reduce((a,x)=>a+x.pend,0);}
 function interesCard(c){return (c.compras||[]).reduce((a,p)=>a+Math.max(0,cuotaOf(p)*Math.max(1,+p.n||1)-(+p.saldo||0)),0);}
-function cardPayoff(c){let e=0;(c.compras||[]).forEach(p=>{if(saldoPendienteCompra(c.id,p)>0)e=Math.max(e,monthNum(p.startY,p.startM)+Math.max(1,+p.n||1)-1);});return e;}
+function cardPayoff(c){let e=0;comprasState(c).forEach(x=>{if(x.pend>0.5)e=Math.max(e,monthNum(x.p.startY,x.p.startM)+Math.max(1,+x.p.n||1)-1);});return e;}
 function cardPayMonth(c,y,mn){const kn=monthNum(y,mn);let pay=0;(c.compras||[]).forEach(p=>{const sn=monthNum(p.startY,p.startM);if(kn>=sn&&kn<sn+Math.max(1,+p.n||1))pay+=cuotaOf(p);});return pay;}
 function loanCuotaMes(l,y,mn){const sn=monthNum(l.startY,l.startM),kn=monthNum(y,mn);return (kn>=sn&&kn<sn+(+l.meses||0))?(+l.cuota||0):0;}
 function fechaMes(t){const d=new Date(t.fecha+'T00:00');return monthNum(d.getFullYear(),d.getMonth()+1);}
@@ -668,7 +673,7 @@ function renderDeu(){
  const payOpts=S.tarjetas.map(c=>`<option value="c:${c.id}">Tarjeta · ${c.nombre}</option>`).join('')+S.loans.map(l=>`<option value="l:${l.id}">Préstamo · ${l.nombre}</option>`).join('');
  document.getElementById('payCard').innerHTML=payOpts||'<option value="">(sin deudas)</option>';onPayCardChange();
  const lc=document.getElementById('lnCuenta');if(lc)lc.innerHTML=(S.cuentas||[]).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
- let cb='';S.tarjetas.forEach(c=>(c.compras||[]).forEach(p=>{const end=monthNum(p.startY,p.startM)+Math.max(1,+p.n||1)-1;const pend=saldoPendienteCompra(c.id,p);
+ let cb='';S.tarjetas.forEach(c=>(c.compras||[]).forEach(p=>{const end=monthNum(p.startY,p.startM)+Math.max(1,+p.n||1)-1;const pend=pendCompra(c,p);
   cb+=`<tr><td class="lft">${c.nombre}</td><td class="lft"><input class="cell" style="width:140px;text-align:left" value="${p.desc||''}" onchange="editCompra(${c.id},${p.id},'desc',this.value)"></td>
    <td><input class="cell" type="number" value="${p.saldo}" onchange="editCompra(${c.id},${p.id},'saldo',this.value)"></td>
    <td class="calc" style="${pend<=0.5?'color:var(--pos)':''}">${pend<=0.5?'Pagado ✓':fmt(pend)}</td>
@@ -709,11 +714,11 @@ function editLoan(id,f,v){const l=S.loans.find(x=>x.id===id);if(!l)return;if(['m
 function editLoanStart(id,v){const l=S.loans.find(x=>x.id===id);if(!l||!v)return;const[y,m]=v.split('-').map(Number);l.startY=y;l.startM=m;save();}
 function delLoan(id){if(confirm('¿Borrar préstamo? (si registró un ingreso de financiamiento, también se quita)')){S.loans=S.loans.filter(x=>x.id!==id);S.tx=S.tx.filter(t=>t.loanId!==id);save();}}
 function onPayCardChange(){const v=document.getElementById('payCard').value||'';const w=document.getElementById('payCompraWrap'),sel=document.getElementById('payCompra');
- if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));const comp=((c&&c.compras)||[]).filter(p=>saldoPendienteCompra(c.id,p)>0.005);
-  sel.innerHTML='<option value="">Toda la tarjeta</option>'+comp.map(p=>`<option value="${p.id}">${p.desc||'Compra'} — pendiente ${fmt(saldoPendienteCompra(c.id,p))}</option>`).join('');
+ if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));const comp=((c&&c.compras)||[]).filter(p=>pendCompra(c,p)>0.005);
+  sel.innerHTML='<option value="">Toda la tarjeta</option>'+comp.map(p=>`<option value="${p.id}">${p.desc||'Compra'} — pendiente ${fmt(pendCompra(c,p))}</option>`).join('');
   w.style.display='flex';}else{w.style.display='none';}fillPayMonto();}
 function fillPayMonto(){const v=document.getElementById('payCard').value||'';const mEl=document.getElementById('payMonto');if(!mEl)return;const now=new Date(),y=now.getFullYear(),mn=now.getMonth()+1;let amt=0;
- if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));if(c){const cp=document.getElementById('payCompra').value;if(cp){const p=(c.compras||[]).find(x=>x.id===+cp);if(p)amt=saldoPendienteCompra(c.id,p);}else{amt=cardMonthStatus(c,y,mn).falta;if(amt<=0.5)amt=consumidoCard(c);}}}
+ if(v.startsWith('c:')){const c=S.tarjetas.find(x=>x.id===+v.slice(2));if(c){const cp=document.getElementById('payCompra').value;if(cp){const p=(c.compras||[]).find(x=>x.id===+cp);if(p)amt=pendCompra(c,p);}else{amt=cardMonthStatus(c,y,mn).falta;if(amt<=0.5)amt=consumidoCard(c);}}}
  else if(v.startsWith('l:')){const l=S.loans.find(x=>x.id===+v.slice(2));if(l){amt=loanMonthStatus(l,y,mn).falta;if(amt<=0.5)amt=+l.cuota||0;}}
  if(amt>0.005)mEl.value=Math.round(amt*100)/100;}
 function addCardPayment(){const v=document.getElementById('payCard').value,f=document.getElementById('payFecha').value,mo=parseFloat(document.getElementById('payMonto').value);
@@ -837,7 +842,7 @@ function setCfg(k,t,v){if(t==='t'){S.cfg[k]=v;save();return;}S.cfg[k]=t==='p'?(p
 
 /* ---------- infra ---------- */
 function initials(n){return (n||'').trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,3).toUpperCase()||'JSG';}
-function renderAll(){const sb=document.getElementById('brandSub');if(sb)sb.textContent=S.cfg.titular||'';const lg=document.getElementById('logoBox');if(lg)lg.textContent=initials(S.cfg.titular);renderDash();renderMov();renderPres();renderDeu();renderMet();renderEECC();renderCfg();}
+function renderAll(){const av=document.getElementById('appVer');if(av)av.textContent='v'+APP_VERSION;const sb=document.getElementById('brandSub');if(sb)sb.textContent=S.cfg.titular||'';const lg=document.getElementById('logoBox');if(lg)lg.textContent=initials(S.cfg.titular);renderDash();renderMov();renderPres();renderDeu();renderMet();renderEECC();renderCfg();}
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.getElementById(t.dataset.v).classList.add('active');});
 document.getElementById('mes').onchange=()=>{renderDash();renderPres();};
 document.getElementById('movFiltro').onchange=renderMov;
