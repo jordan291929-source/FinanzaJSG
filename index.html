@@ -296,7 +296,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0
 .bar{background:var(--track)}
 
 /* ---------- menú con indicador que se desliza ---------- */
-.botnav{position:relative}
+/* OJO: no poner position aquí — pisaría el position:fixed del media query móvil.
+   Un elemento fixed ya sirve de bloque contenedor para .ind (absolute). */
 .botnav .ind{position:absolute;top:2px;height:3px;border-radius:3px;background:var(--brand);
  transition:transform .3s cubic-bezier(.32,.72,0,1),width .3s cubic-bezier(.32,.72,0,1);pointer-events:none}
 .botnav button{transition:color .18s,transform .12s}
@@ -549,7 +550,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='2.9.0'; // se actualiza con cada mejora del sistema
+const APP_VERSION='2.9.1'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -1408,10 +1409,19 @@ addEventListener('load',()=>{
      backgroundColor:top.map((p,i)=>p[0]==='Otros'?CS('--line-strong'):ramp[Math.min(i,ramp.length-1)]),
      borderRadius:{topLeft:0,bottomLeft:0,topRight:4,bottomRight:4},borderSkipped:'left',
      maxBarThickness:22}]};
-   opts=Object.assign({indexAxis:'y',plugins:{legend:{display:false}},
+   const corto=t=>{t=String(t).replace(/\s*\(.*\)\s*$/,'').split(' / ')[0].trim();return t.length>18?t.slice(0,17)+'…':t;};
+   data.labels=data.labels.map(corto);
+   opts=Object.assign({},opts||{},{indexAxis:'y',cutout:undefined,
+     layout:{padding:{right:10}},
+     plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmt(c.parsed.x)}}},
      scales:{x:{beginAtZero:true,grid:{color:grid,drawBorder:false},
                 ticks:{color:muted,font:{family:'Inter',size:10},callback:v=>'S/'+(v>=1000?(v/1000).toFixed(1)+'k':Math.round(v))}},
-             y:{grid:{display:false},ticks:{color:muted,font:{family:'Inter',size:11},autoSkip:false}}}},opts||{});
+             y:{grid:{display:false},ticks:{color:muted,font:{family:'Inter',size:11},autoSkip:false,crossAlign:'far'}}}});
+  }
+  // flujo de caja: usar el par validado para daltonismo (verde/rojo falla en deuteranopia)
+  if(id==='cMon'&&data&&data.datasets&&data.datasets.length===2){
+   data.datasets[0].backgroundColor=CS('--in');
+   data.datasets[1].backgroundColor=CS('--out');
   }
   // especificaciones para las demas barras
   if(type==='bar'&&data&&data.datasets){
