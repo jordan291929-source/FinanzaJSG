@@ -335,6 +335,31 @@ nav.tabs .ind2{position:absolute;left:0;bottom:0;height:2px;background:var(--bra
 .lock .out{margin-top:22px;font-size:12px;color:var(--muted);background:none;border:none;box-shadow:none;text-decoration:underline}
 .lock .msg{margin-top:14px;font-size:12.5px;color:var(--neg);min-height:18px;font-weight:600}
 
+
+/* --- v2.9.3 · el heroe entra a la cuadricula y el svg ya no calcula su alto --- */
+.hero .spark,.tileHero .spark{display:none}
+.tile2 .mini{height:26px;overflow:hidden;margin-top:2px}
+.tile2 .mini>svg{width:100%;height:100%;display:block}
+@media(min-width:841px){
+ #heroBox{display:none}
+ .tiles{grid-template-columns:repeat(4,1fr);gap:12px}
+ .tileHero{grid-column:span 2;background:var(--surface);border:1px solid var(--line);
+  border-radius:14px;padding:19px 22px;box-shadow:var(--shadow-sm);
+  display:flex;flex-direction:column;justify-content:center;min-width:0}
+ .tileHero .hl{font-size:12.5px;color:var(--muted);margin-bottom:2px}
+ .tileHero .hv{font-size:44px;font-weight:700;letter-spacing:-.035em;line-height:1.04;
+  font-variant-numeric:proportional-nums}
+ .tileHero .hmeta{display:flex;flex-wrap:wrap;gap:9px;align-items:baseline;margin-top:8px}
+ .tileHero .delta{font-size:13px;font-weight:600}
+ .tileHero .delta.up{color:var(--pos)}.tileHero .delta.down{color:var(--neg)}.tileHero .delta.flat{color:var(--muted)}
+ .tileHero .td{font-size:13px;font-weight:600}
+ .tileHero .td.up{color:var(--pos)}.tileHero .td.down{color:var(--neg)}.tileHero .td.flat{color:var(--muted)}
+ .tileHero .hnote{font-size:12.5px;color:var(--muted)}
+ .tile2{justify-content:center}
+}
+@media(min-width:841px) and (max-width:1099px){.tiles{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:840px){.tileHero{display:none}}
+
 </style>
 </head>
 <body>
@@ -552,7 +577,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='2.9.2'; // se actualiza con cada mejora del sistema
+const APP_VERSION='2.9.3'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -1356,28 +1381,28 @@ addEventListener('load',()=>{
   // series de 12 meses hacia atrás
   const hist=(fn)=>{const out=[];let a=y,b=mn;const ks=[];for(let i=0;i<12;i++){ks.unshift([a,b]);b--;if(b<1){b=12;a--;}}
    ks.forEach(([q,w])=>out.push(fn(q,w)));return out;};
-  const sSaldo=hist(saldoHasta), sGasto=hist(gastoMes);
+  const sGasto=hist(gastoMes);
 
   // HÉROE: el saldo de caja
   let hero=$('heroBox');
   if(!hero){hero=document.createElement('div');hero.className='hero';hero.id='heroBox';kp.parentNode.insertBefore(hero,kp);}
-  hero.innerHTML=`<div class="hl">Disponible al cierre de ${MESL[mn-1]}</div>
+  const heroHTML=`<div class="hl">Disponible al cierre de ${MESL[mn-1]}</div>
    <div class="hv" style="color:${saldo>=0?CS('--ink'):CS('--neg')}">${fmt(saldo)}</div>
    <div class="hmeta">${deltaHTML(saldo,saldoHasta(py,pm),true)}
-    <span class="hnote">· deuda ${compact(deuda)} · patrimonio ${compact(saldo-deuda)}</span></div>
-   <div class="spark">${spark(sSaldo,300,44,acc,dim)}</div>`;
+    <span class="hnote">· deuda ${compact(deuda)} · patrimonio ${compact(saldo-deuda)}</span></div>`;
+  hero.innerHTML=heroHTML;
 
   // TILES
   const sev=p=>p>=0.6?CS('--neg'):p>=0.36?CS('--warn'):CS('--pos');
   kp.className='tiles';
-  kp.innerHTML=`
+  kp.innerHTML=`<div class="tileHero">${heroHTML}</div>
   <div class="tile2"><div class="tl">Ingreso del mes</div>
    <div class="tv" style="color:${CS('--pos')}">${fmt(iReal||I)}</div>
    <div class="ts">${iReal?'registrado':'proyectado del sueldo'}</div></div>
   <div class="tile2"><div class="tl">Gasto del mes</div>
    <div class="tv">${fmt(gReal)}</div>
    ${deltaHTML(gReal,gastoMes(py,pm),false)}
-   <svg class="mini">${spark(sGasto,150,26,CS('--out'),dim)}</svg></div>
+   <div class="mini">${spark(sGasto,150,26,CS('--out'),dim)}</div></div>
   <div class="tile2"><div class="tl">Deuda total</div>
    <div class="tv" style="color:${deuda>0?CS('--neg'):CS('--pos')}">${fmt(deuda)}</div>
    <div class="ts">${S.loans.length} préstamos · ${S.tarjetas.length} tarjetas</div></div>
