@@ -435,6 +435,33 @@ nav.tabs .ind2{background:#fff}
 .hv .pts{font-size:.34em;letter-spacing:.14em;vertical-align:.32em}
 
 
+
+/* ---------- v3.2.0 · casilla que no se desborda + hoja de registrar pago ---------- */
+.chkrow{flex:1 1 100%;display:flex;align-items:center;gap:11px;cursor:pointer;
+ padding:11px 13px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;
+ margin:0;text-transform:none;letter-spacing:normal;min-width:0}
+.chkrow input[type=checkbox]{width:19px;height:19px;flex:0 0 auto;margin:0;padding:0;
+ accent-color:var(--brand);cursor:pointer}
+.chkrow span{font-size:12.5px;color:var(--ink-soft);font-weight:500;line-height:1.35;min-width:0}
+.chkrow span b{color:var(--ink);font-weight:600}
+.chkrow:hover{border-color:var(--line-strong)}
+
+/* la hoja de pago comparte estilo con la de anotar */
+.sheet.pago .fila{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px}
+.sheet.pago .fila.uno{grid-template-columns:1fr}
+.sheet .lab{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+ color:var(--muted);font-weight:600;margin-bottom:5px}
+.sheet .resu{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;
+ padding:11px 13px;margin-bottom:13px;font-size:12.5px;color:var(--ink-soft);line-height:1.45}
+.sheet .resu b{color:var(--ink)}
+@media(min-width:841px){.sheet.pago{display:block;left:50%;right:auto;bottom:auto;top:50%;
+ width:420px;max-width:calc(100vw - 32px);border-radius:20px;
+ transform:translate(-50%,-50%) scale(.94);opacity:0;pointer-events:none;
+ transition:transform .22s cubic-bezier(.32,.72,0,1),opacity .18s}
+ .sheet.pago.on{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+ .sheet.pago .grab{display:none}
+ .sheetbg{display:block}}
+
 </style>
 </head>
 <body>
@@ -574,7 +601,7 @@ nav.tabs .ind2{background:#fff}
     <div class="field"><label>Plazo (meses)</label><input type="number" id="lnMeses" value="12"></div>
     <div class="field"><label>Día pago</label><input type="number" id="lnDia" value="5"></div>
     <div class="field"><label>Inicio cuotas</label><input type="month" id="lnInicio"></div>
-    <div class="field" style="flex-direction:row;align-items:center;gap:7px;align-self:center"><input type="checkbox" id="lnNuevo" onchange="toggleLnNuevo()" style="width:auto;transform:scale(1.2)"><label style="margin:0;text-transform:none;font-size:12px">El dinero entra a mi caja ahora</label></div>
+    <label class="chkrow" for="lnNuevo"><input type="checkbox" id="lnNuevo" onchange="toggleLnNuevo()"><span>El dinero entra a mi caja ahora <b>(préstamo nuevo)</b></span></label>
     <div class="field" id="lnCuentaWrap" style="display:none"><label>Cuenta donde cae</label><select id="lnCuenta"></select></div>
     <button onclick="addLoan()">Agregar préstamo</button>
   </div>
@@ -652,7 +679,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='3.1.2'; // se actualiza con cada mejora del sistema
+const APP_VERSION='3.2.0'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -1688,6 +1715,16 @@ addEventListener('load',()=>{
  montarAccesos(); inyectarOjo();
 })();
 </script>
+<div class="sheet pago" id="sheetPago" role="dialog" aria-label="Registrar pago de deuda">
+ <div class="grab"></div>
+ <h4>Registrar pago</h4>
+ <div class="resu" id="pgResu"></div>
+ <div class="fila uno"><div><span class="lab">Deuda</span><select id="pgDeuda"></select></div></div>
+ <div class="fila uno" id="pgCompraWrap" style="display:none"><div><span class="lab">Compra específica</span><select id="pgCompra"></select></div></div>
+ <div class="fila"><div><span class="lab">Fecha</span><input type="date" id="pgFecha"></div>
+  <div><span class="lab">Monto (S/)</span><input type="number" step="10" id="pgMonto" inputmode="decimal"></div></div>
+ <button class="go" id="pgGuardar">Registrar pago</button>
+</div>
 <script>
 /* ====== v3.1.0 — pantalla principal minimalista: saldo, accesos, movimientos ====== */
 (function(){
@@ -1775,6 +1812,92 @@ addEventListener('load',()=>{
  renderAll=function(){_ra.apply(this,arguments); try{renderUltimos();}catch(e){}};
  reubicar();
  try{ if(window.renderFiguras) renderFiguras(); }catch(e){}
+})();
+</script>
+<script>
+/* ====== v3.2.0 — hoja de registrar pago (reusa addCardPayment) y navegación sin saltos ====== */
+(function(){
+ const $=id=>document.getElementById(id);
+ const hoja=$('sheetPago'), bg=$('sheetbg');
+
+ function abrir(){
+  // clonar el selector real: mismos valores, cero duplicación de lógica
+  $('pgDeuda').innerHTML=$('payCard').innerHTML;
+  $('pgDeuda').value=$('payCard').value;
+  sincronizar();
+  $('pgFecha').value=$('payFecha').value||keyOf(new Date());
+  bg.classList.add('on'); hoja.classList.add('on');
+  setTimeout(()=>$('pgMonto').focus(),260);
+ }
+ function cerrar(){ bg.classList.remove('on'); hoja.classList.remove('on'); }
+
+ /* refleja la elección en el formulario real para que corran onPayCardChange y fillPayMonto */
+ function sincronizar(){
+  const pc=$('payCard');
+  pc.value=$('pgDeuda').value;
+  pc.dispatchEvent(new Event('change'));            // ← la propia app rellena compras y monto
+  const wrap=$('payCompraWrap'), vis=wrap && getComputedStyle(wrap).display!=='none';
+  $('pgCompraWrap').style.display = vis ? '' : 'none';
+  if(vis){ $('pgCompra').innerHTML=$('payCompra').innerHTML; $('pgCompra').value=$('payCompra').value; }
+  $('pgMonto').value = $('payMonto').value || '';
+  resumen();
+ }
+ function resumen(){
+  const v=$('pgDeuda').value||'', id=+v.split(':')[1];
+  let html='Elige la deuda a pagar.';
+  if(v.startsWith('c:')){
+   const c=S.tarjetas.find(x=>x.id===id);
+   if(c){const hoy=new Date(), st=cardMonthStatus(c,hoy.getFullYear(),hoy.getMonth()+1);
+    html=`<b>${c.nombre}</b> · saldo ${fmt(consumidoCard(c))}<br>`+
+         (st.cuota<=0.01?`Este mes no vence cuota`
+          :`Cuota de este mes ${fmt(st.cuota)}`+(st.falta>0.01?` · falta <b>${fmt(st.falta)}</b>`:` · <b>ya cubierta</b>`));}
+  }else if(v.startsWith('l:')){
+   const l=S.loans.find(x=>x.id===id);
+   if(l){const hoy=new Date(), st=loanMonthStatus(l,hoy.getFullYear(),hoy.getMonth()+1);
+    html=`<b>${l.nombre}</b> · saldo ${fmt(loanRem(l))} · ${loanCuotasPagadas(l)}/${l.meses} cuotas<br>`+
+         (st.cuota<=0.01?`Este mes no vence cuota · cuota fija ${fmt(l.cuota)}`
+          :`Cuota de este mes ${fmt(st.cuota)}`+(st.falta>0.01?` · falta <b>${fmt(st.falta)}</b>`:` · <b>ya cubierta</b>`));}
+  }
+  $('pgResu').innerHTML=html;
+ }
+ $('pgDeuda').onchange=sincronizar;
+ $('pgCompra').onchange=function(){
+  $('payCompra').value=this.value;
+  $('payCompra').dispatchEvent(new Event('change'));   // fillPayMonto()
+  $('pgMonto').value=$('payMonto').value||'';
+ };
+ $('pgGuardar').onclick=function(){
+  const m=parseFloat($('pgMonto').value);
+  if(!m){ $('pgMonto').focus(); return; }
+  $('payCard').value=$('pgDeuda').value;
+  $('payCard').dispatchEvent(new Event('change'));
+  if(getComputedStyle($('payCompraWrap')).display!=='none') $('payCompra').value=$('pgCompra').value;
+  $('payFecha').value=$('pgFecha').value||keyOf(new Date());
+  $('payMonto').value=m;
+  addCardPayment();          // ← la misma función del formulario grande
+  cerrar();
+ };
+ bg.addEventListener('click',cerrar);
+ addEventListener('keydown',e=>{ if(e.key==='Escape'&&hoja.classList.contains('on')) cerrar(); });
+
+ /* ---------- los accesos: sin saltos animados ---------- */
+ window.__abrirPago=abrir;
+ function reemplazarAccesos(){
+  const g=$('accesos'); if(!g) return;
+  const bs=[...g.querySelectorAll('.acc')];
+  if(bs[1]) bs[1].onclick=()=>abrir();                       // Registrar pago -> hoja, sin navegar
+  if(bs[2]) bs[2].onclick=()=>{document.querySelector('.tab[data-v="deu"]').click(); window.scrollTo(0,0);};
+  if(bs[3]) bs[3].onclick=()=>{document.querySelector('.tab[data-v="eecc"]').click(); window.scrollTo(0,0);};
+  if(bs[0]) bs[0].onclick=()=>{ if(innerWidth<=840){$('fab').click();} else {document.querySelector('.tab[data-v="mov"]').click(); window.scrollTo(0,0);} };
+ }
+ const _rf=window.renderFiguras;
+ window.renderFiguras=function(){ _rf.apply(this,arguments); reemplazarAccesos(); };
+ reemplazarAccesos();
+
+ /* el botón + de la barra inferior tampoco debe hacer scroll animado */
+ document.querySelectorAll('#botnav button').forEach(b=>{
+  b.onclick=()=>{const t=document.querySelector('.tab[data-v="'+b.dataset.go+'"]'); if(t)t.click(); window.scrollTo(0,0);};
+ });
 })();
 </script>
 </body>
