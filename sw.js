@@ -1,6 +1,6 @@
 /* Service worker: deja la app usable sin internet.
    Sube CACHE cada vez que edites index.html o el vendor. */
-const CACHE = 'finanzas-v3.2.0';
+const CACHE = 'finanzas-v3.3.0';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './vendor/chart.umd.min.js', './vendor/jspdf.umd.min.js',

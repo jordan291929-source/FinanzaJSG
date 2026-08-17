@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#1f3a5f">
+<meta name="theme-color" content="#0c6d78" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a4f58" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -463,8 +465,94 @@ nav.tabs .ind2{background:#fff}
  .sheetbg{display:block}}
 
 </style>
+
+<style id="v330">
+/* ================== v3.3.0 · capa de app nativa ==================
+   Solo presentacion e interaccion. No toca calculos ni datos. */
+
+/* ---------- comportamiento tactil de app, no de pagina web ---------- */
+html{-webkit-text-size-adjust:100%}
+html,body{overscroll-behavior-y:contain}   /* apaga el "refrescar" del navegador: el nuestro manda */
+body{-webkit-tap-highlight-color:transparent}
+.botnav,.tabs,.lock .pad,#splash{-webkit-user-select:none;user-select:none}
+
+/* ---------- 1. arranque: cortina con la marca en vez del destello blanco ---------- */
+#splash{position:fixed;inset:0;z-index:300;background:linear-gradient(160deg,#0c6d78,#0e919f);
+ display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;
+ transition:opacity .34s ease,visibility .34s}
+#splash.off{opacity:0;visibility:hidden;pointer-events:none}
+#splash .mk{width:64px;height:64px;border-radius:19px;background:rgba(255,255,255,.17);
+ border:1px solid rgba(255,255,255,.26);color:#fff;
+ display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;letter-spacing:.5px;
+ animation:spIn .48s cubic-bezier(.34,1.56,.64,1)}
+#splash .nm{font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:#fff}
+#splash .ld{width:82px;height:3px;border-radius:2px;background:rgba(255,255,255,.26);overflow:hidden}
+#splash .ld i{display:block;height:100%;width:38%;border-radius:2px;background:#fff;
+ animation:spLd 1.05s ease-in-out infinite}
+@media(prefers-color-scheme:dark){#splash{background:linear-gradient(160deg,#0a4f58,#0c6d78)}}
+@keyframes spIn{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:none}}
+@keyframes spLd{0%{transform:translateX(-110%)}100%{transform:translateX(270%)}}
+
+/* ---------- 2. transicion entre secciones (View Transitions, con respaldo) ---------- */
+main{view-transition-name:sec}
+::view-transition-old(sec){animation:vtOut .17s ease both}
+::view-transition-new(sec){animation:vtIn .27s cubic-bezier(.32,.72,0,1) both}
+@keyframes vtOut{to{opacity:0;transform:translateX(calc(var(--vt,1) * -13px))}}
+@keyframes vtIn{from{opacity:0;transform:translateX(calc(var(--vt,1) * 15px))}}
+
+/* ---------- 3. esqueletos de carga (mientras baja la nube) ---------- */
+.sk{position:relative;overflow:hidden;display:inline-block;vertical-align:middle;
+ background:var(--line);border-radius:7px;color:transparent!important}
+.sk::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+ background:linear-gradient(90deg,transparent,rgba(255,255,255,.62),transparent);animation:shim 1.15s infinite}
+@media(prefers-color-scheme:dark){.sk::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent)}}
+@keyframes shim{100%{transform:translateX(100%)}}
+.skrow{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.skrow .a{flex:0 0 38px;height:38px;border-radius:12px}
+.skrow .b{flex:1 1 auto;display:flex;flex-direction:column;gap:6px}
+.skrow .b i{height:11px;border-radius:6px;display:block}
+.skrow .c{flex:0 0 66px;height:13px;border-radius:6px}
+
+/* ---------- 4. arrastrar hacia abajo para refrescar ---------- */
+#ptr{position:fixed;left:0;right:0;top:0;z-index:35;display:none;justify-content:center;
+ pointer-events:none;transform:translateY(-46px);opacity:0}
+@media(max-width:840px){#ptr{display:flex}}
+#ptr .rr{margin-top:9px;width:33px;height:33px;border-radius:50%;background:var(--surface);
+ border:1px solid var(--line);box-shadow:var(--shadow);display:grid;place-items:center}
+#ptr svg{width:17px;height:17px;stroke:var(--navy);stroke-width:2.2;fill:none;
+ stroke-linecap:round;display:block}
+#ptr.spin .rr{animation:rot .75s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ---------- 5. botones que avisan que estan trabajando ---------- */
+button.cargando{position:relative;color:transparent!important;pointer-events:none}
+button.cargando::after{content:"";position:absolute;left:50%;top:50%;width:15px;height:15px;
+ margin:-7.5px 0 0 -7.5px;border-radius:50%;border:2px solid var(--line-strong);
+ border-top-color:var(--navy);animation:rot .7s linear infinite}
+
+/* ---------- 6. escala de lectura de banca movil (mas aire, menos letra diminuta) ---------- */
+@media(max-width:840px){
+ .mv1{padding:13px 2px}
+ .mv1 .tx strong{font-size:14.5px;letter-spacing:-.01em}
+ .mv1 .tx span{font-size:12px}
+ .mv1 .am{font-size:14.5px}
+ .card .lbl{font-size:10px;letter-spacing:.07em}
+ .card .val{font-size:20px}
+ .box h3{font-size:12px;letter-spacing:.04em}
+ .hint{font-size:12px}
+ .empty{font-size:13.5px;padding:24px 14px}
+}
+
+/* ---------- 7. respeto por quien pide menos movimiento ---------- */
+@media(prefers-reduced-motion:reduce){
+ #splash .mk,#splash .ld i,.sk::after,#ptr.spin .rr,button.cargando::after{animation:none}
+ .view.active{animation:none}
+ ::view-transition-old(sec),::view-transition-new(sec){animation:none}
+}
+</style>
 </head>
 <body>
+<div id="splash" aria-hidden="true"><div class="mk" id="splashMk">JS</div><div class="nm" id="splashNm">Finanzas</div><div class="ld"><i></i></div></div>
 <header>
   <div class="brand"><div class="logo" id="logoBox">JSG</div><div><h1>Reporte de Finanzas Personal <span class="ver" id="appVer" title="Versión"></span></h1><p id="brandSub"></p></div></div>
   <nav class="tabs">
@@ -664,6 +752,7 @@ nav.tabs .ind2{background:#fff}
     <button onclick="cargarPlanInicial()" class="ghost">Cargar mis datos del plan (ago-2026)</button>
     <button onclick="pinConfigurar()" class="ghost">Activar / cambiar PIN</button>
     <button onclick="pinQuitar()" class="ghost">Quitar PIN</button>
+    <button onclick="vibrarToggle()" class="ghost" id="btnVib">Vibración: activada</button>
     <input type="file" id="bkFile" accept=".json,application/json" style="display:none" onchange="onBackupFile(this)">
     <button onclick="resetAll()" class="danger">Reiniciar todo</button>
   </div>
@@ -679,7 +768,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='3.2.0'; // se actualiza con cada mejora del sistema
+const APP_VERSION='3.3.0'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -748,13 +837,13 @@ function pushCloud(){const u=getSyncUrl();if(!u)return;clearTimeout(pushTimer);p
  fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(S),redirect:'follow'})
   .then(()=>syncStatus('Guardado en la nube · '+new Date().toLocaleTimeString('es-PE')))
   .catch(()=>syncStatus('Error al guardar en la nube',1));},1200);}
-function pushNow(){const u=getSyncUrl();if(!u){alert('Primero conecta tu URL de sincronización');return;}S._ts=Date.now();persist();
- fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(S),redirect:'follow'})
+function pushNow(){const u=getSyncUrl();if(!u){alert('Primero conecta tu URL de sincronización');return Promise.resolve();}S._ts=Date.now();persist();
+ return fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(S),redirect:'follow'})
   .then(()=>syncStatus('Guardado en la nube · '+new Date().toLocaleTimeString('es-PE'))).catch(()=>syncStatus('Error al guardar',1));}
-function pullCloud(force){const u=getSyncUrl();if(!u){if(force)alert('Primero conecta tu URL');return;}
- if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(u)){syncStatus('La URL debe empezar con https://script.google.com/macros/s/... y terminar en /exec',1);return;}
+function pullCloud(force){const u=getSyncUrl();if(!u){if(force)alert('Primero conecta tu URL');return Promise.resolve();}
+ if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(u)){syncStatus('La URL debe empezar con https://script.google.com/macros/s/... y terminar en /exec',1);return Promise.resolve();}
  syncStatus('Cargando de la nube...');
- fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now()).then(r=>r.text()).then(txt=>{
+ return fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now()).then(r=>r.text()).then(txt=>{
   let d;try{d=JSON.parse(txt);}catch(e){
    if(/accounts\.google|sign ?in|iniciar sesi|<html/i.test(txt))throw new Error('login');
    throw new Error('parse');}
@@ -1897,6 +1986,179 @@ addEventListener('load',()=>{
  /* el botón + de la barra inferior tampoco debe hacer scroll animado */
  document.querySelectorAll('#botnav button').forEach(b=>{
   b.onclick=()=>{const t=document.querySelector('.tab[data-v="'+b.dataset.go+'"]'); if(t)t.click(); window.scrollTo(0,0);};
+ });
+})();
+</script>
+<script>
+/* ============ v3.3.0 — se siente como una app, no como una web ============
+   Todo lo de aquí es presentación e interacción. Ninguna función de este
+   bloque calcula, escribe ni transforma datos: reusa las de siempre
+   (pullCloud, renderAll, los .tab, el fab, la hoja de pago). ============ */
+(function(){
+ const $=id=>document.getElementById(id);
+ const quieto=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+ /* ---------- 1. vibración: confirma con el dedo, no con un cartel ---------- */
+ const VK='vibrar';
+ window.hapt=function(p){
+  if(localStorage.getItem(VK)==='0')return;
+  try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){}
+ };
+ function pintarVib(){const b=$('btnVib');
+  if(b) b.textContent='Vibración: '+(localStorage.getItem(VK)==='0'?'desactivada':'activada');}
+ window.vibrarToggle=function(){
+  const off=localStorage.getItem(VK)==='0';
+  localStorage.setItem(VK,off?'1':'0');
+  pintarVib(); if(off) hapt(16);
+ };
+ pintarVib();
+
+ /* ---------- 2. arranque ---------- */
+ const t0=performance.now();
+ function quitarSplash(){
+  const s=$('splash'); if(!s) return;
+  s.classList.add('off'); setTimeout(()=>{ if(s.parentNode) s.remove(); },420);
+ }
+ try{
+  const n=(S&&S.cfg&&S.cfg.titular)||'';
+  if(n){ $('splashMk').textContent=initials(n); $('splashNm').textContent=n; }
+ }catch(e){}
+ function irse(){ setTimeout(quitarSplash, Math.max(0, 480-(performance.now()-t0))); }
+ if(document.readyState==='complete') irse(); else addEventListener('load',irse);
+ setTimeout(quitarSplash, 2800);   // red de seguridad: nunca dejarlo pegado
+
+ /* ---------- 3. navegación con transición real, sin scroll animado ---------- */
+ const ORD=['dash','mov','pres','deu','met','eecc','cfg'];
+ const idxDe=v=>Math.max(0,ORD.indexOf(v));
+ let enVuelo=false;   // una transición a la vez
+ window.irSeccion=function(v){
+  const t=document.querySelector('.tab[data-v="'+v+'"]'); if(!t) return;
+  const act=document.querySelector('.tab.active');
+  const cur=act?act.dataset.v:'dash';
+  if(cur===v){ window.scrollTo(0,0); return; }
+  const dir = idxDe(v)>idxDe(cur) ? 1 : -1;
+  const raiz=document.documentElement;
+  raiz.style.setProperty('--vt',dir);
+  raiz.style.setProperty('--dir',dir>0?'12px':'-12px');
+  const cambiar=()=>{ t.click(); window.scrollTo(0,0); };
+  if(document.startViewTransition && !quieto() && !enVuelo){
+   enVuelo=true;
+   let tr; try{ tr=document.startViewTransition(cambiar); }
+   catch(e){ enVuelo=false; cambiar(); return; }
+   Promise.resolve(tr.finished).catch(()=>{}).then(()=>{ enVuelo=false; });
+  } else cambiar();
+ };
+
+ /* barra inferior */
+ document.querySelectorAll('#botnav button').forEach(b=>{
+  b.onclick=()=>{ hapt(8); irSeccion(b.dataset.go); };
+ });
+
+ /* los atajos de la pantalla principal y "ver todos" también usan la transición */
+ function reengancharAtajos(){
+  const vt=$('verTodos'); if(vt) vt.onclick=()=>{ hapt(8); irSeccion('mov'); };
+  const g=$('accesos'); if(!g) return;
+  const bs=[...g.querySelectorAll('.acc')];
+  if(bs[0]) bs[0].onclick=()=>{ hapt(8); if(innerWidth<=840) $('fab').click(); else irSeccion('mov'); };
+  if(bs[2]) bs[2].onclick=()=>{ hapt(8); irSeccion('deu'); };
+  if(bs[3]) bs[3].onclick=()=>{ hapt(8); irSeccion('eecc'); };
+  /* bs[1] = "Registrar pago": abre la hoja, no navega. Lo dejamos como está. */
+ }
+ const _rf=window.renderFiguras;
+ window.renderFiguras=function(){ _rf.apply(this,arguments); reengancharAtajos(); };
+ reengancharAtajos();
+
+ /* ---------- 4. esqueletos mientras la nube responde ---------- */
+ function filaSk(){return '<div class="skrow"><div class="a sk"></div><div class="b">'+
+  '<i class="sk" style="width:58%"></i><i class="sk" style="width:34%;height:9px"></i></div>'+
+  '<div class="c sk"></div></div>';}
+ let esqOn=false;
+ function esqueleto(on){
+  if(on===esqOn) return;
+  esqOn=on;
+  const hvs=document.querySelectorAll('#heroBox .hv, .tileHero .hv');
+  const m=$('mov10');
+  if(on){
+   hvs.forEach(hv=>hv.innerHTML='<span class="sk" style="width:6.1em;height:.78em;border-radius:9px"></span>');
+   if(m)  m.innerHTML=filaSk()+filaSk()+filaSk();
+  }else{
+   try{ renderAll(); }catch(e){}   // el estado es la fuente de verdad; repinta todo
+  }
+ }
+ const _pull=window.pullCloud;
+ window.pullCloud=function(){
+  esqueleto(true);
+  let p;
+  try{ p=_pull.apply(this,arguments); }catch(e){ esqueleto(false); throw e; }
+  Promise.resolve(p).catch(()=>{}).then(()=>esqueleto(false));
+  return p;
+ };
+
+ /* ---------- 5. arrastrar hacia abajo para refrescar ---------- */
+ const ptr=document.createElement('div'); ptr.id='ptr';
+ ptr.innerHTML='<div class="rr"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 3.5v4.2h-4.2"/></svg></div>';
+ document.body.appendChild(ptr);
+ const rr=ptr.querySelector('.rr');
+ let py=0, activo=false, listo=false, ocupado=false;
+ const tapado=()=>['sheet','sheetPago','lock'].some(id=>{const e=$(id);return e&&e.classList.contains('on');});
+ function poner(y,animar){
+  ptr.style.transition=animar?'transform .3s cubic-bezier(.32,.72,0,1),opacity .24s':'';
+  ptr.style.transform='translateY('+(y-46)+'px)';
+  ptr.style.opacity=y?1:0;
+  if(!y) rr.style.transform='';
+ }
+ addEventListener('touchstart',e=>{
+  if(innerWidth>840||e.touches.length!==1||ocupado||tapado()) return;
+  if((window.scrollY||document.documentElement.scrollTop)>2) return;
+  py=e.touches[0].clientY; activo=true; listo=false;
+ },{passive:true});
+ addEventListener('touchmove',e=>{
+  if(!activo) return;
+  const d=e.touches[0].clientY-py;
+  if(d<=0){ activo=false; poner(0,true); return; }
+  const y=Math.min(74, d*0.52);
+  const antes=listo; listo = y>=52;
+  if(listo&&!antes) hapt(10);
+  poner(y,false);
+  if(!ptr.classList.contains('spin')) rr.style.transform='rotate('+Math.round(y*4.2)+'deg)';
+ },{passive:true});
+ addEventListener('touchend',()=>{
+  if(!activo) return; activo=false;
+  if(!listo){ poner(0,true); return; }
+  ocupado=true; hapt(15);
+  ptr.classList.add('spin'); poner(46,true);
+  const hay = (typeof getSyncUrl==='function') && getSyncUrl();
+  const tarea = hay ? Promise.resolve(pullCloud(false)).catch(()=>{})
+                    : new Promise(r=>setTimeout(()=>{ try{renderAll();}catch(e){} r(); },520));
+  tarea.then(()=>setTimeout(()=>{
+   ptr.classList.remove('spin'); poner(0,true); ocupado=false;
+  },380));
+ },{passive:true});
+
+ /* ---------- 6. vibración en los momentos que importan ---------- */
+ const lock=$('lock');
+ if(lock){
+  lock.querySelectorAll('.pad button').forEach(b=>b.addEventListener('click',()=>hapt(9)));
+  /* error de PIN: patrón corto de rechazo */
+  new MutationObserver(ms=>ms.forEach(m=>{
+   if(m.attributeName==='class' && lock.classList.contains('err')) hapt([12,55,12]);
+  })).observe(lock,{attributes:true,attributeFilter:['class']});
+ }
+ ['qGuardar','pgGuardar','fab'].forEach(id=>{
+  const e=$(id); if(e) e.addEventListener('click',()=>hapt(id==='fab'?8:18));
+ });
+
+ /* ---------- 7. los botones de la nube muestran que están trabajando ---------- */
+ document.querySelectorAll('#cfg button.ghost').forEach(b=>{
+  const t=b.textContent.trim();
+  const fn = t==='Cargar de la nube' ? ()=>pullCloud(true)
+           : t==='Guardar en la nube' ? ()=>pushNow() : null;
+  if(!fn) return;
+  b.removeAttribute('onclick');
+  b.onclick=()=>{
+   hapt(12); b.classList.add('cargando');
+   Promise.resolve(fn()).catch(()=>{}).then(()=>setTimeout(()=>b.classList.remove('cargando'),260));
+  };
  });
 })();
 </script>
