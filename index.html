@@ -406,13 +406,34 @@ nav.tabs .ind2{background:#fff}
  vertical-align:middle;border-radius:7px}
 .ojo:hover{color:var(--brand);background:var(--navy-soft)}
 .ojo svg{width:15px;height:15px;stroke-width:1.9}
-body.oculto .hv,body.oculto .tv,body.oculto .hnote,body.oculto .delta,body.oculto .td,
-body.oculto .ag .mt b,body.oculto .tile2 .ts,body.oculto #incomePill,
-body.oculto .hside .v,body.oculto .bbox .amt,body.oculto .bstat{
- filter:blur(8px);user-select:none;pointer-events:none}
-body.oculto .hv{filter:blur(11px)}
-body.oculto .tile2 .mini,body.oculto canvas{filter:blur(6px)}
+
+
 .ocultoAviso{font-size:12px;color:var(--muted)}
+
+
+/* ================== v3.1.0 · principal minimalista ================== */
+.mov10{display:flex;flex-direction:column}
+.mv1{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.mv1:last-child{border-bottom:0}
+.mv1 .av{flex:0 0 38px;height:38px;border-radius:12px;display:grid;place-items:center;
+ background:var(--surface-2);border:1px solid var(--line);font-size:14px;font-weight:700;color:var(--muted)}
+.mv1.in .av{background:var(--pos-soft);border-color:transparent;color:var(--pos)}
+.mv1 .tx{flex:1 1 auto;min-width:0}
+.mv1 .tx strong{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv1 .tx span{font-size:11.5px;color:var(--muted)}
+.mv1 .am{flex:0 0 auto;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mv1 .am.in{color:var(--pos)} .mv1 .am.out{color:var(--ink)}
+.vertodo{display:block;width:100%;margin-top:13px;background:var(--surface-2);color:var(--brand);
+ border:1px solid var(--line);box-shadow:none;font-weight:600;font-size:13px;padding:11px}
+.vertodo:hover{background:var(--navy-soft)}
+
+.secKpi{margin-bottom:16px}
+
+
+/* ---------- saldo oculto al estilo Interbank: puntos, no difuminado ---------- */
+.pts{letter-spacing:.02em;font-variant-numeric:normal}
+.hv .pts{font-size:.34em;letter-spacing:.14em;vertical-align:.32em}
+
 
 </style>
 </head>
@@ -631,7 +652,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='3.0.0'; // se actualiza con cada mejora del sistema
+const APP_VERSION='3.1.2'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -1441,9 +1462,9 @@ addEventListener('load',()=>{
   let hero=$('heroBox');
   if(!hero){hero=document.createElement('div');hero.className='hero';hero.id='heroBox';kp.parentNode.insertBefore(hero,kp);}
   const heroHTML=`<div class="hl">Disponible al cierre de ${MESL[mn-1]}</div>
-   <div class="hv" style="color:${saldo>=0?CS('--ink'):CS('--neg')}">${fmt(saldo)}</div>
-   <div class="hmeta">${deltaHTML(saldo,saldoHasta(py,pm),true)}
-    <span class="hnote">· deuda ${compact(deuda)} · patrimonio ${compact(saldo-deuda)}</span></div>`;
+   <div class="hv" style="color:${window.__ocultoSaldo?CS('--ink'):(saldo>=0?CS('--ink'):CS('--neg'))}">${oc(fmt(saldo))}</div>
+   ${ocIf(`<div class="hmeta">${deltaHTML(saldo,saldoHasta(py,pm),true)}
+    <span class="hnote">· deuda ${compact(deuda)} · patrimonio ${compact(saldo-deuda)}</span></div>`)}`;
   hero.innerHTML=heroHTML;
 
   // TILES
@@ -1602,18 +1623,28 @@ addEventListener('load',()=>{
 (function(){
  const $=id=>document.getElementById(id);
 
+ /* enmascarar importes: cantidad FIJA de puntos para no filtrar el tamaño del número */
+ window.__ocultoSaldo=true;
+ window.oc=function(txt){ return window.__ocultoSaldo ? '<span class="pts">S/ \u25cf\u25cf\u25cf\u25cf\u25cf\u25cf\u25cf</span>' : txt; };
+ window.ocIf=function(html){ return window.__ocultoSaldo ? '' : html; };
  /* ---------- 1. SALDO OCULTO (se oculta en cada apertura, como Yape) ---------- */
  let visible=false;
  const OJO_ON=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>`;
  const OJO_OFF=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>`;
  function pintarOjo(){
   document.body.classList.toggle('oculto',!visible);
+  window.__ocultoSaldo=!visible;
   document.querySelectorAll('.ojo').forEach(b=>{
    b.innerHTML=(visible?OJO_OFF:OJO_ON)+'<span>'+(visible?'Ocultar':'Mostrar saldo')+'</span>';
    b.setAttribute('aria-pressed',String(visible));
   });
  }
- window.toggleSaldo=function(){visible=!visible;pintarOjo();};
+ window.toggleSaldo=function(){
+  visible=!visible; window.__ocultoSaldo=!visible;
+  try{ renderFiguras(); }catch(e){}
+  try{ renderUltimos(); }catch(e){}
+  pintarOjo();
+ };
  pintarOjo();
 
  /* ---------- 2. ACCESOS RÁPIDOS ---------- */
@@ -1655,6 +1686,95 @@ addEventListener('load',()=>{
  const _rf=window.renderFiguras;
  window.renderFiguras=function(){ _rf.apply(this,arguments); montarAccesos(); inyectarOjo(); };
  montarAccesos(); inyectarOjo();
+})();
+</script>
+<script>
+/* ====== v3.1.0 — pantalla principal minimalista: saldo, accesos, movimientos ====== */
+(function(){
+ const $=id=>document.getElementById(id);
+ const MESC=['ene','feb','mar','abr','may','jun','jul','ago','set','oct','nov','dic'];
+
+ /* ---------- 1. mover bloques a su sección natural (los renderizadores los buscan por id) ---------- */
+ function reubicar(){
+  const mover=(el,destino,alPrincipio)=>{
+   const d=$(destino); if(!el||!d||el.dataset.movido) return;
+   el.dataset.movido='1';
+   if(alPrincipio&&d.firstChild) d.insertBefore(el,d.firstChild); else d.appendChild(el);
+  };
+  // la agenda de vencimientos -> Deudas (arriba)
+  mover($('agendaBox'),'deu',true);
+  // regla 50/30/20 y avisos -> Presupuesto
+  const rule=$('rule'); if(rule) mover(rule.closest('.box'),'pres',false);
+  mover($('alert'),'pres',false);
+  // gasto diario + gasto por categoría -> Presupuesto
+  const cDay=$('cDay'); if(cDay){const g=cDay.closest('.grid2')||cDay.closest('.box'); mover(g,'pres',false);}
+  // flujo de caja por mes -> Estado de cuenta
+  const cMon=$('cMon'); if(cMon) mover(cMon.closest('.box'),'eecc',false);
+  // contenedores para los KPI que salen de la principal
+  [['kpiDeu','deu'],['kpiPres','pres'],['kpiMet','met']].forEach(([id,dest])=>{
+   if($(id)) return; const d=$(dest); if(!d) return;
+   const c=document.createElement('div'); c.id=id; c.className='tiles secKpi';
+   d.insertBefore(c, d.firstChild);
+  });
+ }
+
+ /* ---------- 2. historial de los últimos 10 movimientos ---------- */
+ function caja(){
+  let b=$('movBox'); if(b) return b;
+  const dash=$('dash'); if(!dash) return null;
+  b=document.createElement('div'); b.className='box'; b.id='movBox';
+  b.innerHTML='<h3>Últimos movimientos</h3><div class="mov10" id="mov10"></div>'+
+   '<button class="vertodo" type="button" id="verTodos">Ver todos los movimientos</button>';
+  dash.appendChild(b);
+  b.querySelector('#verTodos').onclick=()=>{
+   document.querySelector('.tab[data-v="mov"]').click(); window.scrollTo({top:0,behavior:'smooth'});};
+  return b;
+ }
+ window.renderUltimos=function(){
+  const b=caja(); if(!b) return;
+  const cont=$('mov10');
+  const tx=(S.tx||[]).slice().sort((a,c)=>c.fecha.localeCompare(a.fecha)).slice(0,10);
+  if(!tx.length){cont.innerHTML='<div class="empty">Aún no registras movimientos. Toca <b>Anotar gasto</b> arriba.</div>';
+   $('verTodos').style.display='none'; return;}
+  $('verTodos').style.display='block';
+  cont.innerHTML=tx.map(t=>{
+   const ing=t.tipo==='Ingreso';
+   const c=catById(t.catId);
+   const cta=t.cardId?(S.tarjetas.find(x=>x.id===t.cardId)||{}).nombre
+            :(S.cuentas||[]).find(x=>x.id===t.cuentaId);
+   const medio=t.cardId?(cta||'tarjeta'):(cta?cta.nombre:'');
+   const d=t.fecha.split('-');
+   return `<div class="mv1 ${ing?'in':''}">
+    <div class="av">${(+d[2])}<span style="font-size:8.5px;display:block;line-height:1;margin-top:1px">${MESC[+d[1]-1]}</span></div>
+    <div class="tx"><strong>${t.concepto||'-'}</strong>
+     <span>${ing?'Ingreso':(c?c.nombre.split(' (')[0]:'Gasto')}${medio?' · '+medio:''}</span></div>
+    <div class="am ${ing?'in':'out'}">${(ing?'+':'\u2212')+' '+fmt(t.monto)}</div></div>`;
+  }).join('');
+ };
+
+ /* ---------- 3. repartir los KPI a sus secciones ---------- */
+ window.repartirKpis=function(){
+  const kp=$('kpis'); if(!kp) return;
+  const tiles=[...kp.querySelectorAll('.tile2')];
+  const buscar=t=>tiles.find(x=>{const l=x.querySelector('.tl');return l&&l.textContent.trim()===t;});
+  const grupos=[['kpiDeu',['Deuda total','Cuota sobre ingreso']],
+                ['kpiPres',['Ingreso del mes','Gasto del mes','Tasa de ahorro']],
+                ['kpiMet',['Avance de metas']]];
+  grupos.forEach(([dest,nombres])=>{
+   const d=$(dest); if(!d) return; d.innerHTML='';
+   nombres.forEach(n=>{const t=buscar(n); if(t) d.appendChild(t);});
+  });
+  // en la principal solo queda el saldo
+  kp.querySelectorAll('.tile2').forEach(t=>t.remove());
+  kp.style.display = kp.querySelector('.tileHero') ? '' : 'none';
+ };
+
+ const _rf=window.renderFiguras;
+ window.renderFiguras=function(){ _rf.apply(this,arguments); reubicar(); repartirKpis(); renderUltimos(); };
+ const _ra=renderAll;
+ renderAll=function(){_ra.apply(this,arguments); try{renderUltimos();}catch(e){}};
+ reubicar();
+ try{ if(window.renderFiguras) renderFiguras(); }catch(e){}
 })();
 </script>
 </body>
