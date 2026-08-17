@@ -147,7 +147,9 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
  .brand p{font-size:11px}
  header nav.tabs{display:none}
  main{padding:14px 14px calc(78px + env(safe-area-inset-bottom,0px))}
- .selrow{gap:7px;margin-bottom:13px}
+ .selrow{gap:7px;margin-bottom:11px}
+ #incomePill{display:none}
+ .hero{margin-bottom:11px}
  .selrow input[type=month],.selrow input{flex:1 1 auto;min-width:0;padding:8px 10px;font-size:13.5px}
  .selrow .pill{font-size:11px;padding:5px 10px}
  .cards{grid-template-columns:1fr 1fr;gap:9px}
@@ -221,6 +223,114 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
 .agtag.ok{background:var(--pos-soft);color:var(--pos)}
 .agtag.pend{background:var(--warn-soft);color:var(--warn)}
 .agtag.late{background:var(--neg-soft);color:var(--neg)}
+
+
+/* ============ v2.9.0 · paleta validada + contrato de figuras ============ */
+:root{
+ --brand:#0c6d78; --brand-2:#0e919f; --accent:#0e919f;
+ --ink:#0d1b21; --ink-soft:#3f4f57; --muted:#66757d; --faint:#93a1a8;
+ --line:#e5eaec; --line-strong:#d2dade; --surface:#ffffff; --surface-2:#f6f9fa; --bg:#eef2f3;
+ --navy:#0c6d78; --navy-2:#0e919f; --navy-soft:#e6f4f6;
+ --pos:#0f7a52; --pos-soft:#e8f5ef; --neg:#b3263b; --neg-soft:#fbecef;
+ --warn:#c2410c; --warn-soft:#fdf0e8;
+ --in:#0e919f;   /* ingresos en graficos  */
+ --out:#c2410c;  /* egresos en graficos   */
+ --q1:#5cc4d0; --q2:#1ba5b4; --q3:#0e919f; --q4:#0b7784; --q5:#08525c;  /* rampa magnitud */
+ --track:#dff0f2;
+}
+body{background:linear-gradient(180deg,#e9eff0,#f4f7f8 300px)}
+header{background:rgba(255,255,255,.86)}
+.brand .logo{background:linear-gradient(135deg,#0e919f,#0c6d78);box-shadow:0 3px 9px rgba(14,145,159,.3)}
+.box h3::before{background:linear-gradient(180deg,#0e919f,#0c6d78)}
+button{background:linear-gradient(180deg,#0f9dab,#0c6d78);box-shadow:0 1px 2px rgba(12,109,120,.2)}
+.tab.active{color:var(--brand);border-bottom-color:var(--brand)}
+input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(14,145,159,.16)}
+.fab{background:linear-gradient(180deg,#0f9dab,#0c6d78);box-shadow:0 5px 18px rgba(12,109,120,.4)}
+@media(prefers-color-scheme:dark){:root{
+ --brand:#14a5b5; --brand-2:#3fbccb; --accent:#14a5b5;
+ --ink:#e7eef0; --ink-soft:#b3c2c7; --muted:#859399; --faint:#66757d;
+ --line:#212c33; --line-strong:#2e3b43; --surface:#161c24; --surface-2:#1c242c; --bg:#0f1419;
+ --navy:#14a5b5; --navy-2:#3fbccb; --navy-soft:#12303a;
+ --pos:#3ecf8e; --pos-soft:#0f2620; --neg:#ff7189; --neg-soft:#2b1519;
+ --warn:#e08a55; --warn-soft:#2b1d14;
+ --in:#1a9cab; --out:#cf6e33;
+ --q1:#0a5f6a; --q2:#0e8492; --q3:#12a0b0; --q4:#3fbccb; --q5:#7fd4de;
+ --track:#1e3038;}
+ body{background:linear-gradient(180deg,#0c1116,#0f1419 300px)}
+ header{background:rgba(22,28,36,.88)}
+ .brand .logo{background:linear-gradient(135deg,#14a5b5,#0c6d78)}
+ button{background:linear-gradient(180deg,#14a5b5,#0c6d78)}
+ .fab{background:linear-gradient(180deg,#14a5b5,#0c6d78)}
+}
+
+/* ---------- número héroe (uno por vista) ---------- */
+.hero{background:var(--surface);border:1px solid var(--line);border-radius:var(--r2,16px);
+ padding:20px 22px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.hero .hl{font-size:12.5px;color:var(--muted);font-weight:500;margin-bottom:2px}
+.hero .hv{font-size:48px;font-weight:700;letter-spacing:-.035em;line-height:1.05;
+ font-variant-numeric:proportional-nums}
+.hero .hmeta{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:8px}
+.hero .delta{font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.hero .delta.up{color:var(--pos)} .hero .delta.down{color:var(--neg)} .hero .delta.flat{color:var(--muted)}
+.hero .hnote{font-size:12.5px;color:var(--muted)}
+.hero .spark{margin-top:12px;display:block;width:100%;height:44px;overflow:visible}
+@media(max-width:840px){.hero{padding:16px 17px}.hero .hv{font-size:40px}.hero .spark{height:38px}}
+
+/* ---------- tiles con delta y medidor ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:11px;margin-bottom:18px}
+@media(max-width:840px){.tiles{grid-template-columns:1fr 1fr;gap:9px}}
+.tile2{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;
+ box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:5px;min-width:0}
+.tile2 .tl{font-size:12px;color:var(--muted);font-weight:500;line-height:1.25}
+.tile2 .tv{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.1;
+ font-variant-numeric:proportional-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile2 .td{font-size:11.5px;font-weight:600}
+.tile2 .td.up{color:var(--pos)} .tile2 .td.down{color:var(--neg)} .tile2 .td.flat{color:var(--muted)}
+.tile2 .ts{font-size:11.5px;color:var(--muted)}
+.tile2 .meter{height:6px;border-radius:4px;background:var(--track);overflow:hidden;margin-top:2px}
+.tile2 .meter>i{display:block;height:100%;border-radius:4px;transition:width .45s cubic-bezier(.4,0,.2,1)}
+.tile2 svg.mini{width:100%;height:26px;overflow:visible;margin-top:1px}
+@media(max-width:840px){.tile2{padding:11px 12px}.tile2 .tv{font-size:19px}.tile2 .tl{font-size:11px}}
+
+/* ---------- medidor de presupuesto con pista del mismo tono ---------- */
+.bar{background:var(--track)}
+
+/* ---------- menú con indicador que se desliza ---------- */
+.botnav{position:relative}
+.botnav .ind{position:absolute;top:2px;height:3px;border-radius:3px;background:var(--brand);
+ transition:transform .3s cubic-bezier(.32,.72,0,1),width .3s cubic-bezier(.32,.72,0,1);pointer-events:none}
+.botnav button{transition:color .18s,transform .12s}
+.botnav button:active{transform:scale(.9)}
+.botnav button svg{transition:transform .22s cubic-bezier(.34,1.56,.64,1)}
+.botnav button.on svg{transform:translateY(-1px) scale(1.1)}
+nav.tabs{position:relative}
+nav.tabs .ind2{position:absolute;bottom:0;height:2px;background:var(--brand);
+ transition:transform .3s cubic-bezier(.32,.72,0,1),width .3s cubic-bezier(.32,.72,0,1);pointer-events:none}
+@media(max-width:840px){nav.tabs .ind2{display:none}}
+.tab.active{border-bottom-color:transparent!important}
+.view.active{animation:slidein .28s cubic-bezier(.32,.72,0,1)}
+@keyframes slidein{from{opacity:0;transform:translateX(var(--dir,8px))}to{opacity:1;transform:none}}
+
+/* ---------- pantalla de PIN ---------- */
+.lock{position:fixed;inset:0;z-index:200;background:var(--bg);display:none;
+ flex-direction:column;align-items:center;justify-content:center;padding:26px}
+.lock.on{display:flex}
+.lock .lg{width:58px;height:58px;border-radius:16px;background:linear-gradient(135deg,#0e919f,#0c6d78);
+ color:#fff;display:grid;place-items:center;font-weight:700;font-size:19px;margin-bottom:18px}
+.lock h2{font-size:16px;font-weight:600;margin-bottom:4px;color:var(--ink)}
+.lock p{font-size:12.5px;color:var(--muted);margin-bottom:22px;text-align:center;max-width:280px}
+.dots{display:flex;gap:15px;margin-bottom:26px}
+.dots i{width:13px;height:13px;border-radius:50%;border:1.8px solid var(--line-strong);background:transparent;transition:.16s}
+.dots i.f{background:var(--brand);border-color:var(--brand);transform:scale(1.12)}
+.lock.err .dots{animation:shake .34s}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+.pad{display:grid;grid-template-columns:repeat(3,72px);gap:13px;justify-content:center}
+.pad button{background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow-sm);
+ height:60px;border-radius:16px;font-size:22px;font-weight:600;padding:0}
+.pad button:active{background:var(--navy-soft);transform:scale(.94)}
+.pad button.aux{font-size:13px;font-weight:600;color:var(--muted);background:transparent;border-color:transparent;box-shadow:none}
+.lock .out{margin-top:22px;font-size:12px;color:var(--muted);background:none;border:none;box-shadow:none;text-decoration:underline}
+.lock .msg{margin-top:14px;font-size:12.5px;color:var(--neg);min-height:18px;font-weight:600}
 
 </style>
 </head>
@@ -422,6 +532,8 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
     <button onclick="exportData()" class="ghost">Exportar copia (JSON)</button>
     <button onclick="importBackup()" class="ghost">Restaurar copia (JSON)</button>
     <button onclick="cargarPlanInicial()" class="ghost">Cargar mis datos del plan (ago-2026)</button>
+    <button onclick="pinConfigurar()" class="ghost">Activar / cambiar PIN</button>
+    <button onclick="pinQuitar()" class="ghost">Quitar PIN</button>
     <input type="file" id="bkFile" accept=".json,application/json" style="display:none" onchange="onBackupFile(this)">
     <button onclick="resetAll()" class="danger">Reiniciar todo</button>
   </div>
@@ -437,7 +549,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='2.8.0'; // se actualiza con cada mejora del sistema
+const APP_VERSION='2.9.0'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -1177,6 +1289,220 @@ addEventListener('load',()=>{
  const _renderAll = renderAll;
  renderAll = function(){ _renderAll.apply(this,arguments); try{ renderAgenda(); }catch(e){} marcarNav(); };
  renderAgenda(); marcarNav();
+})();
+</script>
+<div class="lock" id="lock" role="dialog" aria-modal="true" aria-label="Bloqueo con PIN">
+ <div class="lg" id="lockLogo">S/</div>
+ <h2 id="lockTit">Ingresa tu PIN</h2>
+ <p id="lockSub">Cortina de privacidad.</p>
+ <div class="dots"><i></i><i></i><i></i><i></i></div>
+ <div class="pad">
+  <button data-d="1">1</button><button data-d="2">2</button><button data-d="3">3</button><button data-d="4">4</button><button data-d="5">5</button><button data-d="6">6</button><button data-d="7">7</button><button data-d="8">8</button><button data-d="9">9</button>
+  <button class="aux" id="padCancel">Cancelar</button>
+  <button data-d="0">0</button>
+  <button class="aux" id="padDel">Borrar</button>
+ </div>
+ <div class="msg" id="lockMsg"></div>
+ <button class="out" id="lockOut">Olvidé mi PIN</button>
+</div>
+<script>
+/* ====== v2.9.0 — figuras, gráficos, menú y PIN. Solo lee datos, nunca los escribe ====== */
+(function(){
+ const $=id=>document.getElementById(id);
+ const CS=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+ const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','setiembre','octubre','noviembre','diciembre'];
+ const compact=n=>{const a=Math.abs(n);return a>=1e6?'S/ '+(n/1e6).toFixed(1)+'M':a>=1e4?'S/ '+(n/1e3).toFixed(1)+'k':fmt(n);};
+ const prevMV=(y,m)=>{m--;if(m<1){m=12;y--;}return [y,m];};
+
+ /* ---------- sparkline: 12 puntos, último en acento ---------- */
+ function spark(vals,w,h,acc,dim){
+  if(!vals.length) return '';
+  const _mn=Math.min(...vals),_mx=Math.max(...vals);
+  if(_mx-_mn < Math.max(1,Math.abs(_mx)*0.005)) return '';   // serie plana: no dibujar
+  const mn=Math.min(...vals,0), mx=Math.max(...vals,1), rg=(mx-mn)||1;
+  const X=i=>(vals.length>1? i*(w-6)/(vals.length-1):0)+3;
+  const Y=v=>h-4-((v-mn)/rg)*(h-8);
+  const d=vals.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  const area=d+` L${X(vals.length-1).toFixed(1)},${h-1} L${X(0).toFixed(1)},${h-1} Z`;
+  const lx=X(vals.length-1).toFixed(1), ly=Y(vals[vals.length-1]).toFixed(1);
+  const zy=Y(0).toFixed(1);
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-hidden="true">
+   ${mn<0?`<line x1="0" x2="${w}" y1="${zy}" y2="${zy}" stroke="${dim}" stroke-width="1"/>`:''}
+   <path d="${area}" fill="${acc}" fill-opacity=".12"/>
+   <path d="${d}" fill="none" stroke="${acc}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+   <circle cx="${lx}" cy="${ly}" r="4" fill="${acc}" stroke="${CS('--surface')}" stroke-width="2"/></svg>`;
+ }
+ const deltaHTML=(cur,prev,buenoSube)=>{
+  if(prev===null||!isFinite(prev)) return '<span class="td flat">sin mes previo</span>';
+  const d=cur-prev; if(Math.abs(d)<0.5) return '<span class="td flat">igual que el mes previo</span>';
+  const sube=d>0, bien=buenoSube?sube:!sube;
+  return `<span class="td ${bien?'up':'down'}">${sube?'▲':'▼'} ${fmt(Math.abs(d))} vs mes previo</span>`;
+ };
+
+ /* ---------- 1. héroe + tiles (reemplaza #kpis después de renderDash) ---------- */
+ window.renderFiguras=function(){
+  const kp=$('kpis'); if(!kp) return;
+  const mv=curMV(), [y,mn]=mv.split('-').map(Number);
+  const I=ingresoMensual(), gReal=gastoMes(y,mn), iReal=ingresoRealMes(y,mn);
+  const saldo=saldoHasta(y,mn), deuda=deudaTotal(), cuotas=cuotasMes(y,mn);
+  const dti=I>0?cuotas/I:0, bk=bucketReal(y,mn);
+  const tasa=I>0?(I-bk.Necesidad-bk.Gusto)/I:0;
+  const objM=S.metas.reduce((a,g)=>a+(+g.objetivo||0),0), yaM=S.metas.reduce((a,g)=>a+(+g.ahorrado||0),0);
+  const [py,pm]=prevMV(y,mn);
+  const acc=CS('--accent'), dim=CS('--line-strong');
+  // series de 12 meses hacia atrás
+  const hist=(fn)=>{const out=[];let a=y,b=mn;const ks=[];for(let i=0;i<12;i++){ks.unshift([a,b]);b--;if(b<1){b=12;a--;}}
+   ks.forEach(([q,w])=>out.push(fn(q,w)));return out;};
+  const sSaldo=hist(saldoHasta), sGasto=hist(gastoMes);
+
+  // HÉROE: el saldo de caja
+  let hero=$('heroBox');
+  if(!hero){hero=document.createElement('div');hero.className='hero';hero.id='heroBox';kp.parentNode.insertBefore(hero,kp);}
+  hero.innerHTML=`<div class="hl">Disponible al cierre de ${MESL[mn-1]}</div>
+   <div class="hv" style="color:${saldo>=0?CS('--ink'):CS('--neg')}">${fmt(saldo)}</div>
+   <div class="hmeta">${deltaHTML(saldo,saldoHasta(py,pm),true)}
+    <span class="hnote">· deuda ${compact(deuda)} · patrimonio ${compact(saldo-deuda)}</span></div>
+   <div class="spark">${spark(sSaldo,300,44,acc,dim)}</div>`;
+
+  // TILES
+  const sev=p=>p>=0.6?CS('--neg'):p>=0.36?CS('--warn'):CS('--pos');
+  kp.className='tiles';
+  kp.innerHTML=`
+  <div class="tile2"><div class="tl">Ingreso del mes</div>
+   <div class="tv" style="color:${CS('--pos')}">${fmt(iReal||I)}</div>
+   <div class="ts">${iReal?'registrado':'proyectado del sueldo'}</div></div>
+  <div class="tile2"><div class="tl">Gasto del mes</div>
+   <div class="tv">${fmt(gReal)}</div>
+   ${deltaHTML(gReal,gastoMes(py,pm),false)}
+   <svg class="mini">${spark(sGasto,150,26,CS('--out'),dim)}</svg></div>
+  <div class="tile2"><div class="tl">Deuda total</div>
+   <div class="tv" style="color:${deuda>0?CS('--neg'):CS('--pos')}">${fmt(deuda)}</div>
+   <div class="ts">${S.loans.length} préstamos · ${S.tarjetas.length} tarjetas</div></div>
+  <div class="tile2"><div class="tl">Cuota sobre ingreso</div>
+   <div class="tv" style="color:${sev(dti)}">${Math.round(dti*100)}%</div>
+   <div class="meter"><i style="width:${Math.min(100,dti*100).toFixed(0)}%;background:${sev(dti)}"></i></div>
+   <div class="ts">sano bajo 30% · cuotas ${compact(cuotas)}</div></div>
+  <div class="tile2"><div class="tl">Tasa de ahorro</div>
+   <div class="tv" style="color:${tasa>=0.2?CS('--pos'):tasa>=0?CS('--warn'):CS('--neg')}">${Math.round(tasa*100)}%</div>
+   <div class="meter"><i style="width:${Math.max(0,Math.min(100,tasa*100)).toFixed(0)}%;background:${tasa>=0.2?CS('--pos'):CS('--warn')}"></i></div>
+   <div class="ts">objetivo 20% o más</div></div>
+  <div class="tile2"><div class="tl">Avance de metas</div>
+   <div class="tv">${objM>0?Math.round(yaM/objM*100):0}%</div>
+   <div class="meter"><i style="width:${objM>0?Math.min(100,yaM/objM*100).toFixed(0):0}%;background:${acc}"></i></div>
+   <div class="ts">${fmt(yaM)} de ${fmt(objM)}</div></div>`;
+ };
+
+ /* ---------- 2. gráficos: especificaciones de marca + doughnut → barras ordenadas ---------- */
+ const _mk=mk;
+ mk=function(id,type,data,opts){
+  const grid=CS('--line'), muted=CS('--muted');
+  // el doughnut de categorías se convierte en barras horizontales de un solo tono
+  if(id==='cPie'&&type==='doughnut'&&data&&data.labels){
+   const ramp=[CS('--q5'),CS('--q4'),CS('--q3'),CS('--q2'),CS('--q1')];
+   const pares=data.labels.map((l,i)=>[l,+((data.datasets[0].data||[])[i]||0)])
+                          .filter(p=>p[1]>0).sort((a,b)=>b[1]-a[1]);
+   const top=pares.slice(0,6), resto=pares.slice(6).reduce((a,p)=>a+p[1],0);
+   if(resto>0) top.push(['Otros',resto]);
+   type='bar';
+   data={labels:top.map(p=>p[0]),datasets:[{data:top.map(p=>p[1]),
+     backgroundColor:top.map((p,i)=>p[0]==='Otros'?CS('--line-strong'):ramp[Math.min(i,ramp.length-1)]),
+     borderRadius:{topLeft:0,bottomLeft:0,topRight:4,bottomRight:4},borderSkipped:'left',
+     maxBarThickness:22}]};
+   opts=Object.assign({indexAxis:'y',plugins:{legend:{display:false}},
+     scales:{x:{beginAtZero:true,grid:{color:grid,drawBorder:false},
+                ticks:{color:muted,font:{family:'Inter',size:10},callback:v=>'S/'+(v>=1000?(v/1000).toFixed(1)+'k':Math.round(v))}},
+             y:{grid:{display:false},ticks:{color:muted,font:{family:'Inter',size:11},autoSkip:false}}}},opts||{});
+  }
+  // especificaciones para las demas barras
+  if(type==='bar'&&data&&data.datasets){
+   data.datasets.forEach(d=>{
+    if(d.maxBarThickness===undefined) d.maxBarThickness=24;
+    if(d.borderRadius===undefined) d.borderRadius={topLeft:4,topRight:4,bottomLeft:0,bottomRight:0};
+    if(d.borderSkipped===undefined) d.borderSkipped='bottom';
+    if(d.borderWidth===undefined&&data.datasets.length>1){d.borderWidth=2;d.borderColor=CS('--surface');}
+   });
+  }
+  return _mk.call(this,id,type,data,opts);
+ };
+
+ /* ---------- 3. menú: indicador deslizante, en las dos barras ---------- */
+ const bn=$('botnav'); const tabsNav=document.querySelector('nav.tabs');
+ if(bn&&!bn.querySelector('.ind')){const i=document.createElement('div');i.className='ind';bn.appendChild(i);}
+ if(tabsNav&&!tabsNav.querySelector('.ind2')){const i=document.createElement('div');i.className='ind2';tabsNav.appendChild(i);}
+ const ORD=['dash','mov','pres','deu','met','eecc','cfg'];
+ let idxActual=0;
+ function moverIndicadores(){
+  const act=document.querySelector('.tab.active'); const v=act?act.dataset.v:'dash';
+  idxActual=Math.max(0,ORD.indexOf(v));
+  const b=bn&&bn.querySelector(`button[data-go="${v}"]`), ind=bn&&bn.querySelector('.ind');
+  if(b&&ind){const w=b.offsetWidth*.5;ind.style.width=w+'px';ind.style.transform=`translateX(${b.offsetLeft+b.offsetWidth/2-w/2}px)`;}
+  const t=document.querySelector(`.tab[data-v="${v}"]`), i2=tabsNav&&tabsNav.querySelector('.ind2');
+  if(t&&i2&&t.offsetWidth){i2.style.width=t.offsetWidth+'px';i2.style.transform=`translateX(${t.offsetLeft}px)`;}
+ }
+ function irA(v,dir){
+  const t=document.querySelector(`.tab[data-v="${v}"]`); if(!t)return;
+  document.documentElement.style.setProperty('--dir',(dir||1)>0?'12px':'-12px');
+  t.click(); moverIndicadores();
+ }
+ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setTimeout(moverIndicadores,0)));
+ addEventListener('resize',moverIndicadores);
+ /* gesto de deslizar entre pestañas (solo movil, solo horizontal claro) */
+ let tx=0,ty=0,tt=0;
+ addEventListener('touchstart',e=>{if(e.touches.length!==1)return;tx=e.touches[0].clientX;ty=e.touches[0].clientY;tt=Date.now();},{passive:true});
+ addEventListener('touchend',e=>{
+  if(innerWidth>840||!e.changedTouches.length)return;
+  if($('sheet').classList.contains('on')||$('lock').classList.contains('on'))return;
+  const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+  if(Date.now()-tt>600||Math.abs(dx)<70||Math.abs(dx)<Math.abs(dy)*2)return;
+  const n=idxActual+(dx<0?1:-1);
+  if(n>=0&&n<ORD.length) irA(ORD[n],dx<0?1:-1);
+ },{passive:true});
+
+ /* ---------- 4. PIN de 4 dígitos: cortina de privacidad, nunca sincronizado ---------- */
+ const K='pinHash';
+ const sha=async t=>{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('fjsg:'+t));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');};
+ const lock=$('lock'); let buf='', modo='abrir', primero='';
+ const pintar=()=>{lock.querySelectorAll('.dots i').forEach((d,i)=>d.classList.toggle('f',i<buf.length));};
+ const msg=t=>{$('lockMsg').textContent=t||'';};
+ function pedir(m){modo=m;buf='';if(m!=='repetir')primero='';pintar();msg('');
+  $('lockTit').textContent = m==='abrir'?'Ingresa tu PIN':m==='nuevo'?'Crea un PIN de 4 dígitos':'Repite el PIN';
+  $('lockSub').textContent = m==='abrir'?'Cortina de privacidad. No protege contra alguien con conocimientos técnicos.'
+   :'Solo se guarda un hash, nunca el PIN. Y queda en este dispositivo, no se sincroniza.';
+  $('lockOut').style.display = m==='abrir'?'block':'none';
+  lock.classList.add('on');
+ }
+ window.pinConfigurar=()=>pedir('nuevo');
+ window.pinQuitar=()=>{localStorage.removeItem(K);alert('PIN desactivado.');};
+ async function digito(d){
+  if(buf.length>=4)return; buf+=d; pintar(); msg('');
+  if(buf.length<4)return;
+  await new Promise(r=>setTimeout(r,140));
+  const h=await sha(buf);
+  if(modo==='abrir'){
+   if(h===localStorage.getItem(K)){lock.classList.remove('on');}
+   else{lock.classList.add('err');msg('PIN incorrecto');setTimeout(()=>lock.classList.remove('err'),360);buf='';pintar();}
+  }else if(modo==='nuevo'){primero=h;pedir('repetir');}
+  else{ if(h===primero){localStorage.setItem(K,h);lock.classList.remove('on');alert('PIN activado. Te lo pedirá al abrir la app.');}
+        else{lock.classList.add('err');msg('No coincide, empecemos de nuevo');setTimeout(()=>{lock.classList.remove('err');pedir('nuevo');},700);} }
+ }
+ lock.querySelectorAll('.pad button[data-d]').forEach(b=>b.onclick=()=>digito(b.dataset.d));
+ $('padDel').onclick=()=>{buf=buf.slice(0,-1);pintar();msg('');};
+ $('padCancel').onclick=()=>{if(modo==='abrir')return;lock.classList.remove('on');};
+ $('lockOut').onclick=()=>{
+  if(!confirm('¿Olvidaste tu PIN?\n\nComo el PIN es solo una cortina de privacidad y no cifra nada, lo voy a desactivar para que NO pierdas tus datos. Tus finanzas quedan intactas.\n\n¿Desactivar el PIN?'))return;
+  localStorage.removeItem(K); lock.classList.remove('on');
+ };
+ addEventListener('keydown',e=>{if(!lock.classList.contains('on'))return;
+  if(/^[0-9]$/.test(e.key))digito(e.key); else if(e.key==='Backspace'){buf=buf.slice(0,-1);pintar();}});
+ if(localStorage.getItem(K)) pedir('abrir');
+
+ /* ---------- 5. enganche ---------- */
+ const _ra=renderAll;
+ renderAll=function(){_ra.apply(this,arguments);try{renderFiguras();}catch(e){}moverIndicadores();};
+ try{renderFiguras();}catch(e){}
+ setTimeout(moverIndicadores,60);
+ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>setTimeout(()=>{try{renderFiguras();}catch(e){}},80));
 })();
 </script>
 </body>
