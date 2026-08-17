@@ -360,6 +360,60 @@ nav.tabs .ind2{position:absolute;left:0;bottom:0;height:2px;background:var(--bra
 @media(min-width:841px) and (max-width:1099px){.tiles{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:840px){.tileHero{display:none}}
 
+
+/* ================== v3.0.0 · cabecera de marca, accesos rápidos, saldo oculto ================== */
+/* 1. CABECERA CON COLOR DE MARCA (el fondo de la app sigue neutro: los datos se tienen que leer) */
+header{background:linear-gradient(135deg,#0c6d78,#0e919f)!important;border-bottom:none;
+ box-shadow:0 2px 14px rgba(12,109,120,.22);backdrop-filter:none;-webkit-backdrop-filter:none}
+header .brand h1,header .brand p{color:#fff}
+header .brand p{color:rgba(255,255,255,.72)}
+header .brand .logo{background:rgba(255,255,255,.16);box-shadow:none;color:#fff;
+ border:1px solid rgba(255,255,255,.22)}
+header .ver{color:#fff;background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22)}
+nav.tabs .tab{color:rgba(255,255,255,.72)}
+nav.tabs .tab:hover{color:#fff}
+nav.tabs .tab.active{color:#fff;font-weight:600}
+nav.tabs .ind2{background:#fff}
+@media(prefers-color-scheme:dark){
+ header{background:linear-gradient(135deg,#0a4f58,#0c6d78)!important;box-shadow:0 2px 14px rgba(0,0,0,.4)}
+}
+
+/* 2. ACCESOS RÁPIDOS (idea de Yape: las acciones antes que los datos) */
+.accesos{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 16px}
+.acc{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+ padding:14px 8px 11px;display:flex;flex-direction:column;align-items:center;gap:8px;
+ box-shadow:var(--shadow-sm);cursor:pointer;transition:transform .12s,box-shadow .15s;
+ color:var(--ink);font-family:inherit}
+.acc:hover{box-shadow:var(--shadow);transform:translateY(-2px)}
+.acc:active{transform:scale(.95)}
+.acc .ic{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;
+ background:var(--navy-soft);color:var(--brand);flex:0 0 auto}
+.acc .ic svg{width:23px;height:23px;stroke-width:1.9}
+.acc b{font-size:12px;font-weight:600;line-height:1.2;text-align:center;letter-spacing:-.01em}
+.acc .sb{font-size:10.5px;color:var(--muted);font-weight:500;margin-top:-4px}
+@media(max-width:840px){
+ .accesos{gap:8px;margin-bottom:13px}
+ .acc{padding:11px 5px 9px;border-radius:14px;gap:6px}
+ .acc .ic{width:38px;height:38px;border-radius:12px}
+ .acc .ic svg{width:20px;height:20px}
+ .acc b{font-size:10.5px}
+ .acc .sb{display:none}
+}
+
+/* 3. SALDO OCULTO POR DEFECTO */
+.ojo{background:none;border:none;box-shadow:none;padding:3px 7px;margin-left:6px;
+ color:var(--muted);display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+ vertical-align:middle;border-radius:7px}
+.ojo:hover{color:var(--brand);background:var(--navy-soft)}
+.ojo svg{width:15px;height:15px;stroke-width:1.9}
+body.oculto .hv,body.oculto .tv,body.oculto .hnote,body.oculto .delta,body.oculto .td,
+body.oculto .ag .mt b,body.oculto .tile2 .ts,body.oculto #incomePill,
+body.oculto .hside .v,body.oculto .bbox .amt,body.oculto .bstat{
+ filter:blur(8px);user-select:none;pointer-events:none}
+body.oculto .hv{filter:blur(11px)}
+body.oculto .tile2 .mini,body.oculto canvas{filter:blur(6px)}
+.ocultoAviso{font-size:12px;color:var(--muted)}
+
 </style>
 </head>
 <body>
@@ -577,7 +631,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='2.9.3'; // se actualiza con cada mejora del sistema
+const APP_VERSION='3.0.0'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -1541,6 +1595,66 @@ addEventListener('load',()=>{
  try{renderFiguras();}catch(e){}
  setTimeout(moverIndicadores,60);
  matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>setTimeout(()=>{try{renderFiguras();}catch(e){}},80));
+})();
+</script>
+<script>
+/* ====== v3.0.0 — accesos rápidos, saldo oculto y cabecera de marca. Solo lee datos ====== */
+(function(){
+ const $=id=>document.getElementById(id);
+
+ /* ---------- 1. SALDO OCULTO (se oculta en cada apertura, como Yape) ---------- */
+ let visible=false;
+ const OJO_ON=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+ const OJO_OFF=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>`;
+ function pintarOjo(){
+  document.body.classList.toggle('oculto',!visible);
+  document.querySelectorAll('.ojo').forEach(b=>{
+   b.innerHTML=(visible?OJO_OFF:OJO_ON)+'<span>'+(visible?'Ocultar':'Mostrar saldo')+'</span>';
+   b.setAttribute('aria-pressed',String(visible));
+  });
+ }
+ window.toggleSaldo=function(){visible=!visible;pintarOjo();};
+ pintarOjo();
+
+ /* ---------- 2. ACCESOS RÁPIDOS ---------- */
+ const IC={
+  anotar:'<path d="M12 5v14M5 12h14"/>',
+  pagar:'<rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 11h20"/><path d="M6 15h4"/>',
+  deudas:'<path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/>',
+  eecc:'<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/>',
+ };
+ const ACC=[
+  {k:'anotar',t:'Anotar gasto',s:'en 2 toques',go:()=>{ if(innerWidth<=840){$('fab').click(); } else { document.querySelector('.tab[data-v="mov"]').click(); window.scrollTo({top:0,behavior:'smooth'});} }},
+  {k:'pagar', t:'Registrar pago',s:'cuota del mes',go:()=>{document.querySelector('.tab[data-v="deu"]').click();
+     setTimeout(()=>{const el=$('payMonto')||$('payCard');if(el)el.scrollIntoView({behavior:'smooth',block:'center'});},260);}},
+  {k:'deudas',t:'Mis deudas',s:'saldos y TCEA',go:()=>{document.querySelector('.tab[data-v="deu"]').click();window.scrollTo({top:0,behavior:'smooth'});}},
+  {k:'eecc',  t:'Estado de cuenta',s:'PDF del mes',go:()=>{document.querySelector('.tab[data-v="eecc"]').click();window.scrollTo({top:0,behavior:'smooth'});}},
+ ];
+ function montarAccesos(){
+  if($('accesos')) return $('accesos');
+  const dash=$('dash'); if(!dash) return null;
+  const g=document.createElement('div'); g.className='accesos'; g.id='accesos';
+  g.innerHTML=ACC.map((a,i)=>`<button class="acc" data-i="${i}" type="button">
+    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${IC[a.k]}</svg></span>
+    <b>${a.t}</b><span class="sb">${a.s}</span></button>`).join('');
+  g.querySelectorAll('.acc').forEach(b=>b.onclick=()=>ACC[+b.dataset.i].go());
+  const ancla=$('heroBox')||$('kpis');
+  dash.insertBefore(g, ancla);
+  return g;
+ }
+
+ /* ---------- 3. el botón del ojo dentro del bloque del saldo ---------- */
+ const BOTON_OJO='<button class="ojo" type="button" onclick="toggleSaldo()" aria-pressed="false"></button>';
+ function inyectarOjo(){
+  document.querySelectorAll('#heroBox .hl, .tileHero .hl').forEach(hl=>{
+   if(!hl.querySelector('.ojo')) hl.insertAdjacentHTML('beforeend',BOTON_OJO);
+  });
+  pintarOjo();
+ }
+
+ const _rf=window.renderFiguras;
+ window.renderFiguras=function(){ _rf.apply(this,arguments); montarAccesos(); inyectarOjo(); };
+ montarAccesos(); inyectarOjo();
 })();
 </script>
 </body>
