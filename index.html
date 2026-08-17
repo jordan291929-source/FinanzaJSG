@@ -641,6 +641,97 @@ header .brand .logo::after{content:"";position:absolute;right:-2px;bottom:-2px;w
  .botrow>button{width:100%}
 }
 </style>
+
+<style id="v350">
+/* ============ v3.5.0 · banda de saldo, productos, gastos y metas ============
+   El saldo sube al bloque de marca (una sola cifra, como pidió). Se agregan
+   tres resúmenes de sólo lectura a la principal. Nada calcula por su cuenta:
+   todo sale de saldoHasta(), consumidoCard(), saldoCuenta(), gastoMes() y S.metas. */
+
+/* ---------- el héroe viejo se apaga: su cifra ahora vive en la banda ---------- */
+#heroBox,.tileHero{display:none!important}
+
+/* ---------- banda de saldo: continúa el degradado del encabezado y se va al scrollear ---------- */
+#saldoBand{background:linear-gradient(135deg,#0c6d78,#0e919f);color:#fff;
+ padding:2px 28px 20px;position:relative;z-index:19}
+@media(prefers-color-scheme:dark){#saldoBand{background:linear-gradient(135deg,#0a4f58,#0c6d78)}}
+@media(max-width:840px){#saldoBand{padding:0 16px 18px}}
+#saldoBand .hola{font-size:13px;font-weight:500;color:rgba(255,255,255,.8);letter-spacing:-.01em}
+#saldoBand .lbl{display:flex;align-items:center;gap:10px;margin-top:11px;
+ font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:rgba(255,255,255,.72)}
+#saldoBand .cifra{font-size:38px;font-weight:700;letter-spacing:-.035em;line-height:1.08;margin-top:3px;
+ font-variant-numeric:tabular-nums}
+#saldoBand .cifra .pts{font-size:.36em;letter-spacing:.16em;vertical-align:.34em}
+#saldoBand .pie{font-size:12px;color:rgba(255,255,255,.72);margin-top:7px}
+#saldoBand .ojo{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.24);color:#fff;
+ border-radius:20px;padding:4px 11px 4px 8px;display:inline-flex;align-items:center;gap:5px;
+ font-family:inherit;font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;cursor:pointer}
+#saldoBand .ojo:active{transform:scale(.95)}
+#saldoBand .ojo svg{width:13px;height:13px;stroke:currentColor;stroke-width:2;fill:none}
+#saldoBand .ojo span{font-size:10.5px}
+#dash>.selrow:first-child{margin-bottom:14px}
+#dash>.selrow:first-child input[type=month]{max-width:190px;font-size:13px;padding:7px 9px}
+@media(max-width:840px){#dash>.selrow:first-child input[type=month]{max-width:100%}}
+@media(max-width:840px){#saldoBand .cifra{font-size:34px}}
+
+/* ---------- mis productos ---------- */
+.secTit{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px}
+.secTit h4{font-size:13.5px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+.secTit a{font-size:12px;font-weight:600;color:var(--navy);text-decoration:none;cursor:pointer}
+.secTit a:hover{text-decoration:underline}
+.prods{display:flex;gap:12px;overflow-x:auto;padding:2px 0 14px;margin-bottom:4px;
+ scrollbar-width:none;-ms-overflow-style:none;scroll-snap-type:x mandatory}
+.prods::-webkit-scrollbar{display:none}
+#productos{padding:16px 16px 4px}
+#productos .prods{margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px}
+.prod{flex:0 0 auto;width:225px;min-height:118px;border-radius:15px;padding:14px 15px;
+ display:flex;flex-direction:column;justify-content:space-between;scroll-snap-align:start;
+ border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-sm)}
+.prod.tarj{background:linear-gradient(135deg,#0b5f6a,#0e919f);border-color:transparent;color:#fff;
+ box-shadow:0 6px 18px -10px rgba(11,95,106,.75)}
+@media(prefers-color-scheme:dark){.prod.tarj{background:linear-gradient(135deg,#08424a,#0c6d78)}}
+.prod .pn{display:flex;align-items:center;justify-content:space-between;gap:8px;
+ font-size:12.5px;font-weight:600;letter-spacing:-.01em}
+.prod .chip{width:24px;height:17px;border-radius:4px;background:rgba(255,255,255,.28);flex:0 0 auto}
+.prod:not(.tarj) .chip{background:var(--line-strong)}
+.prod .pl{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+ color:rgba(255,255,255,.7);margin-top:12px}
+.prod:not(.tarj) .pl{color:var(--muted)}
+.prod .pv{font-size:21px;font-weight:700;letter-spacing:-.025em;font-variant-numeric:tabular-nums;margin-top:1px}
+.prod .pv .pts{font-size:.52em;letter-spacing:.12em;vertical-align:.22em}
+.prod .pf{display:flex;justify-content:space-between;gap:8px;font-size:11px;margin-top:11px;
+ color:rgba(255,255,255,.7)}
+.prod:not(.tarj) .pf{color:var(--muted)}
+.prod.neg .pv{color:var(--neg)}
+
+/* ---------- gastos del mes: barra segmentada + las 3 más altas ---------- */
+.segbar{display:flex;gap:2px;height:9px;border-radius:5px;overflow:hidden;margin:2px 0 14px;
+ background:var(--track,var(--line))}
+.segbar i{display:block;height:100%}
+.catrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.catrow:last-child{border-bottom:0}
+.catrow .pt{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.catrow .cn{flex:1 1 auto;min-width:0;font-size:13px;font-weight:500;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.catrow .cv{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ---------- metas en tarjetitas ---------- */
+.metasmini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+@media(min-width:900px){.metasmini{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.mmini{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 14px;
+ box-shadow:var(--shadow-sm)}
+.mmini .mn{font-size:13px;font-weight:600;letter-spacing:-.01em;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mmini .mc{font-size:11.5px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.mmini .mb{height:6px;border-radius:4px;background:var(--line);margin-top:10px;overflow:hidden}
+.mmini .mb i{display:block;height:100%;border-radius:4px;background:var(--accent,#0e919f)}
+
+/* ---------- barra inferior de 5 ---------- */
+@media(max-width:840px){
+ .botnav button svg{width:22px;height:22px}
+ .botnav button span{font-size:10.5px}
+}
+</style>
 </head>
 <body>
 <div id="splash" aria-hidden="true"><div class="mk" id="splashMk">JS</div><div class="nm" id="splashNm">Finanzas</div><div class="ld"><i></i></div></div>
@@ -656,6 +747,7 @@ header .brand .logo::after{content:"";position:absolute;right:-2px;bottom:-2px;w
     <div class="tab" data-v="cfg">Configuración</div>
   </nav>
 </header>
+<div id="saldoBand" aria-live="polite"></div>
 <main>
 
 <section id="dash" class="view active">
@@ -859,7 +951,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='3.4.0'; // se actualiza con cada mejora del sistema
+const APP_VERSION='3.5.0'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -2480,6 +2572,161 @@ addEventListener('load',()=>{
  const _ra=window.renderAll;
  window.renderAll=function(){ _ra.apply(this,arguments); try{ armarTodo(); }catch(e){ console.warn('v3.4.0 subsecciones:',e); } };
  try{ armarTodo(); }catch(e){ console.warn('v3.4.0 subsecciones:',e); }
+})();
+</script>
+<script>
+/* ============ v3.5.0 — banda de saldo, mis productos, gastos y metas ============
+   Todo aquí LEE el estado y pinta. No escribe, no calcula reglas nuevas:
+   reusa saldoHasta, consumidoCard, cardPayMonth, saldoCuenta, gastoMes,
+   catById y S.metas, que son las mismas funciones de las tablas. */
+(function(){
+ const $=id=>document.getElementById(id);
+ const vib=n=>{ try{ if(window.hapt) hapt(n); }catch(e){} };
+ const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ const OJO_ON=`<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+ const OJO_OFF=OJO_ON.replace('</svg>','<path d="M3 3l18 18"/></svg>');
+ /* la rampa secuencial validada (un solo tono, claro -> oscuro) */
+ const RAMPA=['#5cc4d0','#1ba5b4','#0e919f','#0b7784','#08525c'];
+ /* MESL viene abreviado; para los rótulos queremos el nombre completo */
+ const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
+              'setiembre','octubre','noviembre','diciembre'];
+
+ function caja(id,dash,titulo,enlace){
+  let b=$(id); if(b) return b;
+  b=document.createElement('div'); b.className='box'; b.id=id;
+  b.innerHTML='<div class="secTit"><h4>'+titulo+'</h4>'+
+    (enlace?'<a data-ir="'+enlace.ir+'">'+enlace.rot+'</a>':'')+'</div><div class="cuerpo"></div>';
+  dash.appendChild(b);
+  const a=b.querySelector('a[data-ir]');
+  if(a) a.onclick=()=>{ vib(8); if(window.irSeccion) irSeccion(a.dataset.ir); };
+  return b;
+ }
+
+ /* ---------- 1. banda de saldo ---------- */
+ function pintarBanda(){
+  const el=$('saldoBand'); if(!el) return;
+  const mv=curMV(), p=mv.split('-').map(Number), y=p[0], mn=p[1];
+  const saldo=saldoHasta(y,mn);
+  const nombre=(S.cfg.titular||'').trim().split(' ')[0]||'';
+  el.innerHTML=
+   (nombre?'<div class="hola">Hola, '+esc(nombre)+'</div>':'')+
+   '<div class="lbl">Disponible al cierre de '+MESES[mn-1]+
+     '<button class="ojo" type="button" onclick="toggleSaldo()" aria-pressed="'+(!window.__ocultoSaldo)+'">'+
+     (window.__ocultoSaldo?OJO_ON:OJO_OFF)+'<span>'+
+     (window.__ocultoSaldo?'Mostrar':'Ocultar')+'</span></button></div>'+
+   '<div class="cifra">'+oc(fmt(saldo))+'</div>'+
+   '<div class="pie">'+(saldo<0?'Estás en rojo este mes':'Después de pagar las cuotas del mes')+'</div>';
+ }
+
+ /* ---------- 2. mis productos ---------- */
+ function pintarProductos(){
+  const dash=$('dash'); if(!dash) return;
+  const b=caja('productos',dash,'Mis productos',{ir:'deu',rot:'Ver deudas'});
+  const mv=curMV(), p=mv.split('-').map(Number), y=p[0], mn=p[1];
+  const tarj=(S.tarjetas||[]).map(function(c){
+   const usado=consumidoCard(c), linea=+c.linea||0;
+   return '<div class="prod tarj">'+
+    '<div class="pn"><span>'+esc(c.nombre)+'</span><span class="chip"></span></div>'+
+    '<div><div class="pl">Línea disponible</div><div class="pv">'+fmt(Math.max(0,linea-usado))+'</div></div>'+
+    '<div class="pf"><span>Usado '+fmt(usado)+'</span>'+
+      '<span>Pago '+(c.dia?('día '+c.dia):'—')+'</span></div></div>';
+  });
+  const ctas=(S.cuentas||[]).map(function(a){
+   const sal=saldoCuenta(a.id);
+   return '<div class="prod'+(sal<0?' neg':'')+'">'+
+    '<div class="pn"><span>'+esc(a.nombre)+'</span><span class="chip"></span></div>'+
+    '<div><div class="pl">Saldo</div><div class="pv">'+fmt(sal)+'</div></div>'+
+    '<div class="pf"><span>'+(sal<0?'En negativo':'Registrado en la app')+'</span></div></div>';
+  });
+  const todos=tarj.concat(ctas);
+  b.querySelector('.secTit h4').textContent='Mis productos';
+  b.querySelector('.cuerpo').innerHTML=todos.length
+   ? '<div class="prods">'+todos.join('')+'</div>'
+   : '<div class="empty">Aún no registras tarjetas ni cuentas.</div>';
+ }
+
+ /* ---------- 3. gastos del mes ---------- */
+ function pintarGastos(){
+  const dash=$('dash'); if(!dash) return;
+  const b=caja('gastosMini',dash,'Gastos del mes',{ir:'pres',rot:'Detalle'});
+  const mv=curMV(), p=mv.split('-').map(Number), y=p[0], mn=p[1];
+  b.querySelector('.secTit h4').textContent='Gastos de '+MESES[mn-1];
+  /* misma cuenta que la tabla de Presupuesto: gasto del mes por categoría */
+  const byCat={};
+  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(function(t){
+   const c=catById(t.catId), nm=c?c.nombre.split(' (')[0]:'Otros';
+   byCat[nm]=(byCat[nm]||0)+(+t.monto||0);
+  });
+  const lista=Object.keys(byCat).map(k=>({n:k,v:byCat[k]})).sort((a,c)=>c.v-a.v);
+  const total=lista.reduce((a,x)=>a+x.v,0);
+  if(!total){ b.querySelector('.cuerpo').innerHTML='<div class="empty">Sin gastos registrados este mes.</div>'; return; }
+  const top=lista.slice(0,5);
+  const otros=total-top.reduce((a,x)=>a+x.v,0);
+  const segs=top.map((x,i)=>'<i style="flex:'+(x.v/total*100).toFixed(2)+';background:'+RAMPA[i]+'"></i>').join('')+
+    (otros>0.5?'<i style="flex:'+(otros/total*100).toFixed(2)+';background:var(--line-strong)"></i>':'');
+  const filas=top.slice(0,3).map((x,i)=>'<div class="catrow"><span class="pt" style="background:'+RAMPA[i]+'"></span>'+
+    '<span class="cn">'+esc(x.n)+'</span><span class="cv">'+fmt(x.v)+'</span></div>').join('');
+  b.querySelector('.cuerpo').innerHTML=
+   '<div class="segbar">'+segs+'</div>'+filas+
+   '<div class="hint" style="margin-top:10px">Total del mes '+fmt(total)+
+     (lista.length>3?' · '+(lista.length-3)+' categoría'+(lista.length-3>1?'s':'')+' más':'')+'</div>';
+ }
+
+ /* ---------- 4. mis metas ---------- */
+ function pintarMetas(){
+  const dash=$('dash'); if(!dash) return;
+  const b=caja('metasMini',dash,'Mis metas',{ir:'met',rot:'Ver todas'});
+  const ms=(S.metas||[]).slice(0,4);
+  b.querySelector('.cuerpo').innerHTML=ms.length
+   ? '<div class="metasmini">'+ms.map(function(g){
+      const obj=+g.objetivo||0, ya=+g.ahorrado||0;
+      const pct=obj>0?Math.min(100,ya/obj*100):0;
+      return '<div class="mmini"><div class="mn">'+esc(g.nombre)+'</div>'+
+       '<div class="mc">'+fmt(ya)+' de '+fmt(obj)+'</div>'+
+       '<div class="mb"><i style="width:'+pct.toFixed(1)+'%"></i></div></div>';
+     }).join('')+'</div>'
+   : '<div class="empty">Sin metas todavía. Toca “Ver todas” para crear una.</div>';
+ }
+
+ /* ---------- 5. orden de la principal ---------- */
+ function ordenar(){
+  const dash=$('dash'); if(!dash) return;
+  ['accesos','productos','movBox','gastosMini','metasMini'].forEach(function(id){
+   const e=$(id); if(e && e.parentNode===dash) dash.appendChild(e);   // appendChild = mover al final
+  });
+ }
+
+ /* ---------- 6. barra inferior de 5 ---------- */
+ (function(){
+  const bn=$('botnav'); if(!bn) return;
+  ['met','eecc'].forEach(function(v){                 // Metas -> "Ver todas"; Estado -> acceso rápido
+   const b=bn.querySelector('button[data-go="'+v+'"]'); if(b) b.remove();
+  });
+  const cfg=bn.querySelector('button[data-go="cfg"]');
+  if(cfg){ const sp=cfg.querySelector('span'); if(sp) sp.textContent='Perfil';
+   cfg.setAttribute('aria-label','Perfil y ajustes'); }
+  const home=bn.querySelector('button[data-go="dash"]');
+  if(home){ const sp=home.querySelector('span'); if(sp) sp.textContent='Inicio'; }
+  /* si la sección activa ya no tiene botón, la pastilla del indicador se esconde */
+  const _is=window.irSeccion;
+  if(_is) window.irSeccion=function(v){
+   _is.apply(this,arguments);
+   setTimeout(function(){
+    const ind=bn.querySelector('.ind');
+    if(ind) ind.style.opacity = bn.querySelector('button[data-go="'+v+'"]') ? '1' : '0';
+   },0);
+  };
+ })();
+
+ /* ---------- 7. enganche: se repinta con cada render ---------- */
+ function pintarTodo(){
+  pintarBanda(); pintarProductos(); pintarGastos(); pintarMetas(); ordenar();
+ }
+ const _rf=window.renderFiguras;
+ window.renderFiguras=function(){ _rf.apply(this,arguments); try{ pintarTodo(); }catch(e){ console.warn('v3.5.0:',e); } };
+ const _ra=window.renderAll;
+ window.renderAll=function(){ _ra.apply(this,arguments); try{ pintarTodo(); }catch(e){ console.warn('v3.5.0:',e); } };
+ try{ pintarTodo(); }catch(e){ console.warn('v3.5.0:',e); }
 })();
 </script>
 </body>
