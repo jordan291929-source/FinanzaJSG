@@ -91,6 +91,24 @@
  }
 
  /* ============================ piezas comunes ============================ */
+ const CERRAR_X='<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+ /* -------- hoja inferior para elegir de una lista --------
+    Antes el campo "Cuenta" era un botón que rotaba de opción en opción y no
+    se veía qué había disponible. Ahora abre la lista, como cualquier app. */
+ function hoja(titulo,ops,sel,alElegir){
+  const bg=$('nx-bg'), sh=$('nx-sheet');
+  if(!bg||!sh) return;
+  sh.innerHTML='<div class="grab"></div><h4>'+h(titulo)+'</h4><div class="lista">'+
+   ops.map(o=>'<button class="op'+(String(o.v)===String(sel)?' on':'')+'" data-v="'+h(o.v)+'">'+
+    '<span class="e">'+(o.e||'•')+'</span><span class="n">'+h(o.n)+
+    (o.s?'<small>'+h(o.s)+'</small>':'')+'</span><span class="ck">✓</span></button>').join('')+'</div>';
+  const cerrar=()=>{ bg.classList.remove('on'); sh.classList.remove('on'); };
+  sh.querySelectorAll('button.op').forEach(b=>b.onclick=()=>{ vib(10); cerrar(); alElegir(b.dataset.v); });
+  bg.onclick=cerrar;
+  bg.classList.add('on'); sh.classList.add('on');
+ }
+
  function barraTop(titulo,sub,derecha){
   return '<div class="nx-top"><button class="bk" data-back aria-label="Volver">‹</button>'+
    '<div class="tt"><h2>'+h(titulo)+'</h2>'+(sub?'<span>'+h(sub)+'</span>':'')+'</div>'+
@@ -425,20 +443,25 @@
   const cuentaRot=(cuentas.find(x=>x[0]===reg.cuentaVal)||['',''])[1];
   const val=reg.monto?parseFloat(reg.monto).toLocaleString('es-PE',{minimumFractionDigits:reg.monto.indexOf('.')>=0?2:2,maximumFractionDigits:2}):'0.00';
   return '<div class="nx-reg">'+
-   '<div class="rt"><button class="x" data-back>✕</button>'+
+   '<div class="rt"><button class="x" data-back aria-label="Cerrar">'+CERRAR_X+'</button>'+
     '<div class="nx-tog"><button data-t="Gasto" class="'+(reg.tipo==='Gasto'?'on':'')+'">Gasto</button>'+
     '<button data-t="Ingreso" class="'+(reg.tipo==='Ingreso'?'on':'')+'">Ingreso</button></div>'+
-    '<span style="width:34px"></span></div>'+
+    '<span></span></div>'+
    '<div class="nx-amt"><div class="k">Monto del '+(reg.tipo==='Gasto'?'gasto':'ingreso')+'</div>'+
     '<div class="v nx-num"><small>S/</small>'+val+'</div></div>'+
+   '<div class="nx-mid">'+
    (reg.tipo==='Gasto'
     ? '<div style="font-size:11.5px;font-weight:600;color:var(--nx-mut);margin:4px 0 0">Categoría</div>'+
-      '<div class="nx-cats">'+grid.map((g,i)=>'<button class="nx-cat'+(g.cat&&reg.catId===g.cat.id?' on':'')+'" '+
-        (g.cat?'data-c="'+g.cat.id+'"':'disabled style="opacity:.35"')+'>'+
-        '<span class="e">'+emo(g.cat?g.cat.nombre:g.rot)+'</span><span>'+g.rot+'</span></button>').join('')+'</div>'
+      '<div class="nx-cats">'+grid.map((g,i)=>{
+        if(i===grid.length-1 || !g.cat)     /* el último y los huecos abren la lista completa */
+          return '<button class="nx-cat mas" type="button">'+
+            '<span class="e">🗂️</span><span>'+(i===grid.length-1?'Todas':'Otras')+'</span></button>';
+        return '<button class="nx-cat'+(reg.catId===g.cat.id?' on':'')+'" data-c="'+g.cat.id+'">'+
+          '<span class="e">'+emo(g.cat.nombre)+'</span><span>'+g.rot+'</span></button>';}).join('')+'</div>'
     : '<div style="height:8px"></div>')+
    '<button class="nx-fld" id="nxCta"><span class="k">Cuenta</span><span class="v">'+h(cuentaRot)+' ›</span></button>'+
    '<div class="nx-fld"><span class="k">Descripción</span><input id="nxDesc" placeholder="Sin descripción" value="'+h(reg.desc)+'"></div>'+
+   '</div>'+
    '<div class="nx-pad">'+[1,2,3,4,5,6,7,8,9].map(d=>'<button data-n="'+d+'">'+d+'</button>').join('')+
     '<button data-n=".">.</button><button data-n="0">0</button><button data-n="del">⌫</button></div>'+
    '<button class="nx-go" id="nxSave"'+(parseFloat(reg.monto)>0?'':' disabled')+'>Guardar '+(reg.tipo==='Gasto'?'gasto':'ingreso')+'</button>'+
@@ -462,11 +485,19 @@
   });
   const de=$('nxDesc'); if(de) de.oninput=()=>{ reg.desc=de.value; };
   const ct=$('nxCta'); if(ct) ct.onclick=()=>{
-   const cuentas=(S.cuentas||[]).map(a=>['a:'+a.id,a.nombre])
-     .concat((S.tarjetas||[]).map(c=>['card:'+c.id,c.nombre+' (crédito)']));
-   const i=cuentas.findIndex(x=>x[0]===reg.cuentaVal);
-   reg.cuentaVal=cuentas[(i+1)%cuentas.length][0]; vib(8); pinta(1);
+   vib(8);
+   const ops=(S.cuentas||[]).map(a=>({v:'a:'+a.id,n:a.nombre,s:'saldo '+fmt(saldoCuenta(a.id)),
+      e:/yape|plin/i.test(a.nombre)?'📲':/efectivo/i.test(a.nombre)?'💵':/d[eé]bito/i.test(a.nombre)?'💳':'🏦'}))
+    .concat((S.tarjetas||[]).map(c=>({v:'card:'+c.id,n:c.nombre+' (crédito)',
+      s:'disponible '+fmt(Math.max(0,(+c.linea||0)-consumidoCard(c))),e:'💳'})));
+   hoja('¿Con qué pagaste?',ops,reg.cuentaVal,v=>{ reg.cuentaVal=v; pinta(0); });
   };
+  document.querySelectorAll('#nx-body .nx-cat.mas').forEach(cg=>cg.onclick=()=>{
+   vib(8);
+   const ops=(S.categorias||[]).filter(c=>c.auto!=='deuda')
+     .map(c=>({v:String(c.id),n:c.nombre.split(' (')[0],s:c.bucket,e:emo(c.nombre)}));
+   hoja('Elige la categoría',ops,String(reg.catId||''),v=>{ reg.catId=+v; pinta(0); });
+  });
   $('nxSave').onclick=()=>{
    const mo=parseFloat(reg.monto)||0; if(!(mo>0)) return;
    /* se llenan los campos del formulario del motor y se llama a SU addMov():
@@ -709,8 +740,8 @@
    else { const l=(S.loans||[]).find(x=>x.id===+id); if(l) sug=loanMonthStatus(l,m.y,m.mn).falta; } }
   const num=parseFloat(pagoMonto)||0;
   return '<div class="nx-reg">'+
-   '<div class="rt"><button class="x" data-back>✕</button>'+
-    '<b style="font-size:15px">Registrar pago</b><span style="width:34px"></span></div>'+
+   '<div class="rt"><button class="x" data-back aria-label="Cerrar">'+CERRAR_X+'</button>'+
+    '<b style="font-size:15px">Registrar pago</b><span></span></div>'+
    '<div class="nx-amt"><div class="k">Monto del pago</div>'+
     '<div class="v nx-num"><small>S/</small>'+num.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
    '<button class="nx-fld" id="nxPD"><span class="k">Deuda</span><span class="v">'+h(rot)+' ›</span></button>'+
@@ -721,7 +752,14 @@
  },wire(p){
   const ops=(S.tarjetas||[]).map(c=>['c:'+c.id]).concat((S.loans||[]).map(l=>['l:'+l.id]));
   const pd=$('nxPD'); if(pd) pd.onclick=()=>{
-   const i=ops.findIndex(x=>x[0]===pagoSel); pagoSel=ops[(i+1)%ops.length][0]; vib(8); pinta(1); };
+   vib(8);
+   const m=mesSel();
+   const lista=(S.tarjetas||[]).map(c=>({v:'c:'+c.id,n:c.nombre,e:'💳',
+      s:'cuota del mes '+fmt(cardMonthStatus(c,m.y,m.mn).cuota)}))
+    .concat((S.loans||[]).map(l=>({v:'l:'+l.id,n:l.nombre,e:'📄',
+      s:'cuota '+fmt(l.cuota)+' · saldo '+fmt(loanRem(l))})));
+   hoja('¿Qué deuda estás pagando?',lista,pagoSel,v=>{ pagoSel=v; pagoMonto=''; pinta(0); });
+  };
   const ps=$('nxPS'); if(ps) ps.onclick=()=>{
    const m=mesSel(), [t,id]=pagoSel.split(':'); let s=0;
    if(t==='c'){ const c=(S.tarjetas||[]).find(x=>x.id===+id); if(c) s=cardMonthStatus(c,m.y,m.mn).falta; }
@@ -797,8 +835,8 @@
  P.aporte={nav:false,html(p){
   const g=(S.metas||[]).find(x=>x.id===p.id)||{};
   const num=parseFloat(apMonto)||0;
-  return '<div class="nx-reg"><div class="rt"><button class="x" data-back>✕</button>'+
-   '<b style="font-size:15px">Aportar</b><span style="width:34px"></span></div>'+
+  return '<div class="nx-reg"><div class="rt"><button class="x" data-back aria-label="Cerrar">'+CERRAR_X+'</button>'+
+   '<b style="font-size:15px">Aportar</b><span></span></div>'+
    '<div class="nx-amt"><div class="k">Aporte a '+h(g.nombre||'la meta')+'</div>'+
     '<div class="v nx-num"><small>S/</small>'+num.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
    '<div class="nx-tip"><span>ℹ️</span><span>El aporte sube el ahorrado de la meta. Si además quieres '+
@@ -1045,12 +1083,27 @@
     .observe(l,{attributes:true,attributeFilter:['class']}); }catch(e){}
  }
 
+ function sinZoom(){
+  /* Se le acercaba la pantalla sin querer con gestos. Safari en iOS ignora
+     user-scalable=no, así que además se frenan la pinza y el doble toque. */
+  ['gesturestart','gesturechange','gestureend'].forEach(ev=>
+   document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+  let ultimo=0;
+  document.addEventListener('touchend',e=>{
+   const t=Date.now(); if(t-ultimo<=320 && e.cancelable) e.preventDefault(); ultimo=t;
+  },{passive:false});
+  document.addEventListener('touchmove',e=>{
+   if(e.touches.length>1 && e.cancelable) e.preventDefault();
+  },{passive:false});
+ }
+
  function montar(){
   if($('nx')) return;
   document.body.classList.add('nx-on');
-  apagarViejo();
+  apagarViejo(); sinZoom();
   const root=document.createElement('div'); root.id='nx';
   root.innerHTML='<div id="nx-body"></div>'+
+   '<div id="nx-bg"></div><div id="nx-sheet" role="dialog" aria-label="Elegir"></div>'+
    '<nav class="nx-nav" id="nx-nav">'+RAIZ.map(k=>
      '<button data-k="'+k+'"><svg viewBox="0 0 24 24">'+NAVICO[k]+'</svg><span>'+NAVROT[k]+'</span></button>').join('')+'</nav>'+
    '<button class="nx-fab" id="nx-fab" aria-label="Registrar">+</button>';
