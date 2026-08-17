@@ -9,12 +9,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Finanzas">
 <title>Finanzas Personales</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="fonts/inter.css">
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/jspdf.plugin.autotable.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
 <style>
 :root{--bg:#eef1f5;--surface:#ffffff;--surface-2:#f7f9fb;--ink:#0e1f33;--ink-soft:#3d4d60;--muted:#6b7785;--faint:#9aa4b1;--line:#e8ebf0;--line-strong:#d7dce3;--navy:#1f3a5f;--navy-2:#274b78;--navy-soft:#eef2f7;--pos:#0f7a52;--pos-soft:#e7f5ef;--neg:#b3263b;--neg-soft:#fbecef;--warn:#a66100;--warn-soft:#fbf2e3;--teal:#0d7c8a;--amber:#bf8a1d;--need:#1f3a5f;--want:#bf8a1d;--save:#0f7a52;--r:14px;--shadow:0 1px 2px rgba(16,24,40,.04),0 6px 20px -8px rgba(16,24,40,.12);--shadow-sm:0 1px 2px rgba(16,24,40,.05);}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -49,6 +51,9 @@ td:first-child,th:first-child,.lft{text-align:left}
 .tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-sm)}
 tbody tr{transition:background .12s}tbody tr:nth-child(even){background:#fcfdfe}tbody tr:hover{background:var(--navy-soft)}tbody tr:last-child td{border-bottom:none}
 input.cell{width:80px;background:transparent;border:1px solid transparent;color:var(--navy);text-align:right;font-size:13px;border-radius:6px;padding:4px 6px;font-weight:600;font-family:inherit;transition:.12s}
+input.cell::-webkit-outer-spin-button,input.cell::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input.cell[type=number]{-moz-appearance:textfield;appearance:textfield}
+input.cell{padding:4px 4px;min-width:0}
 input.cell:hover{border-color:var(--line-strong);background:#fff}input.cell:focus{outline:none;border-color:var(--navy);background:#fff;box-shadow:0 0 0 3px rgba(31,58,95,.12)}
 .calc{color:var(--ink-soft);font-weight:600}
 .row-form{display:flex;gap:14px;flex-wrap:wrap;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
@@ -307,6 +312,9 @@ button.danger{background:#fff;color:var(--neg);border:1px solid #e6b9c1;box-shad
   </div>
   <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
     <button onclick="exportData()" class="ghost">Exportar copia (JSON)</button>
+    <button onclick="importBackup()" class="ghost">Restaurar copia (JSON)</button>
+    <button onclick="cargarPlanInicial()" class="ghost">Cargar mis datos del plan (ago-2026)</button>
+    <input type="file" id="bkFile" accept=".json,application/json" style="display:none" onchange="onBackupFile(this)">
     <button onclick="resetAll()" class="danger">Reiniciar todo</button>
   </div>
 </section>
@@ -318,33 +326,61 @@ const fmt2=n=>'S/ '+(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maxim
 const pad=n=>String(n).padStart(2,'0');
 const CLR={navy:'#1f3a5f',muted:'#6b7785',grid:'#eef0f3',legend:'#3d4d60',pos:'#0f7a52',neg:'#b3263b',teal:'#0d7c8a',amber:'#bf8a1d',slate:'#c4ccd6',need:'#1f3a5f',want:'#bf8a1d',save:'#0f7a52'};
 const newId=()=>Date.now()+Math.floor(Math.random()*1000);
-const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
+const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='2.6.0'; // se actualiza con cada mejora del sistema
+const APP_VERSION='2.7.0'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
- cfg:{titular:'',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
+ cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
  categorias:[
-  {id:1,nombre:'Alimentación',bucket:'Necesidad',limite:600},
+  {id:1,nombre:'Alimentación',bucket:'Necesidad',limite:650},
   {id:2,nombre:'Transporte',bucket:'Necesidad',limite:150},
-  {id:3,nombre:'Servicios (luz, agua, internet, cel)',bucket:'Necesidad',limite:200},
+  {id:3,nombre:'Servicios (luz, agua, internet, cel)',bucket:'Necesidad',limite:75},
   {id:4,nombre:'Vivienda / Alquiler',bucket:'Necesidad',limite:0},
   {id:5,nombre:'Salud',bucket:'Necesidad',limite:0},
   {id:7,nombre:'Pago de deudas',bucket:'Deuda',limite:0,auto:'deuda'},
-  {id:8,nombre:'Restaurantes / Salidas',bucket:'Gusto',limite:150},
-  {id:9,nombre:'Entretenimiento',bucket:'Gusto',limite:100},
-  {id:10,nombre:'Ropa',bucket:'Gusto',limite:100},
-  {id:11,nombre:'Otros',bucket:'Gusto',limite:100},
-  {id:12,nombre:'Ahorro / Fondo',bucket:'Ahorro',limite:0},
+  {id:6,nombre:'Gym / Deporte',bucket:'Gusto',limite:90},
+  {id:8,nombre:'Restaurantes / Salidas',bucket:'Gusto',limite:80},
+  {id:9,nombre:'Entretenimiento',bucket:'Gusto',limite:0},
+  {id:10,nombre:'Ropa',bucket:'Gusto',limite:0},
+  {id:11,nombre:'Otros',bucket:'Gusto',limite:0},
+  {id:12,nombre:'Ahorro / Fondo',bucket:'Ahorro',limite:100},
   {id:13,nombre:'Aporte a metas',bucket:'Ahorro',limite:0}
  ],
  tx:[],
- tarjetas:[], loans:[],
- metas:[], estrategia:'avalancha', extra:0,
+ tarjetas:[
+  {id:101,nombre:'Tarjeta BCP',linea:5000,dia:15,pagoMin:0,compras:[
+    {id:1011,desc:'Saldo ago-2026',saldo:4060,n:12,tea:0.90,startY:2026,startM:9}]},
+  {id:102,nombre:'Tarjeta Interbank',linea:2000,dia:20,pagoMin:0,compras:[
+    {id:1021,desc:'Saldo ago-2026',saldo:1500,n:12,tea:0.90,startY:2026,startM:9}]}
+ ],
+ loans:[
+  {id:201,nombre:'Ripley',monto:551,cuota:210.00,meses:3,dia:15,startY:2026,startM:9},
+  {id:202,nombre:'BCP nov-25',monto:2327,cuota:266.42,meses:14,dia:5,startY:2026,startM:9},
+  {id:203,nombre:'Línea BCP',monto:2935,cuota:260.00,meses:15,dia:5,startY:2026,startM:9},
+  {id:204,nombre:'BCP #1 ago-26',monto:11734,cuota:447.95,meses:59,dia:5,startY:2026,startM:9},
+  {id:205,nombre:'BCP #2 oct-26',monto:14550,cuota:534.18,meses:60,dia:5,startY:2026,startM:10},
+  {id:206,nombre:'Huancayo set-26',monto:20000,cuota:1118.00,meses:24,dia:5,startY:2026,startM:9}
+ ],
+ metas:[
+  {id:301,nombre:'Fondo de emergencia mínimo',objetivo:1000,ahorrado:0,fecha:'2026-12-31'},
+  {id:302,nombre:'Fondo de 3 meses',objetivo:3000,ahorrado:0,fecha:'2027-12-31'},
+  {id:303,nombre:'Capital propio · negocio de ropa',objetivo:2000,ahorrado:0,fecha:'2027-06-30'}
+ ],
+ estrategia:'avalancha', extra:150,
  cuentas:[{id:1,nombre:'Efectivo'},{id:2,nombre:'Yape / Plin'},{id:3,nombre:'Cuenta bancaria'},{id:4,nombre:'Débito'}],
- recurrentes:[],
- favoritos:[{id:1,concepto:'Almuerzo',catId:1,monto:15,cuentaId:1},{id:2,concepto:'Pasaje',catId:2,monto:2.5,cuentaId:1}]
+ recurrentes:[
+  {id:401,concepto:'Gym',catId:6,monto:90,dia:3,cuentaId:3,lastGen:''},
+  {id:402,concepto:'Plan Movistar',catId:3,monto:60,dia:5,cuentaId:3,lastGen:''},
+  {id:403,concepto:'iCloud',catId:3,monto:15,dia:10,cuentaId:3,lastGen:''}
+ ],
+ favoritos:[
+  {id:1,concepto:'Almuerzo menú',catId:1,monto:12,cuentaId:1},
+  {id:2,concepto:'Pasaje',catId:2,monto:2.5,cuentaId:1},
+  {id:3,concepto:'Mercado',catId:1,monto:60,cuentaId:1},
+  {id:4,concepto:'Delivery',catId:8,monto:25,cuentaId:2}
+ ]
 };}
 function migrate(s){const b=defaults();for(const k in b)if(s[k]===undefined)s[k]=b[k];for(const k in b.cfg)if(s.cfg[k]===undefined)s.cfg[k]=b.cfg[k];if(!s.cfg.titular)s.cfg.titular=b.cfg.titular;
  (s.categorias||[]).forEach(c=>{if(!Array.isArray(c.sugerencias))c.sugerencias=defaultSugs(c.nombre);if(c.nombre==='Pago de deudas'){if(!c.auto)c.auto='deuda';c.bucket='Deuda';}});
@@ -448,7 +484,9 @@ function simStrat(strategy,extra){let debts=debtList().map(d=>({...d}));if(!debt
 
 /* ---------- charts ---------- */
 let charts={};
-function mk(id,type,data,opts){if(charts[id])charts[id].destroy();const el=document.getElementById(id);if(!el)return;charts[id]=new Chart(el,{type,data,options:Object.assign({responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CLR.legend,usePointStyle:true,pointStyle:'circle',boxWidth:7,font:{family:'Inter'}}}}},opts)});}
+function mk(id,type,data,opts){const el=document.getElementById(id);if(!el)return;
+ if(typeof Chart==='undefined'){if(!el.dataset.noChart){el.dataset.noChart='1';const d=document.createElement('div');d.className='empty';d.textContent='Gráfico no disponible sin conexión la primera vez. Vuelve a abrir la app con internet y ya quedará guardada.';el.replaceWith(d);}return;}
+ if(charts[id])charts[id].destroy();charts[id]=new Chart(el,{type,data,options:Object.assign({responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CLR.legend,usePointStyle:true,pointStyle:'circle',boxWidth:7,font:{family:'Inter'}}}}},opts)});}
 function axes(){return{x:{ticks:{color:CLR.muted,font:{family:'Inter',size:10},autoSkip:true,maxTicksLimit:16},grid:{color:CLR.grid}},y:{beginAtZero:true,ticks:{color:CLR.muted,font:{family:'Inter',size:10},callback:v=>v>=1000?'S/'+(v/1000).toFixed(1)+'k':'S/'+Math.round(v)},grid:{color:CLR.grid}}};}
 function axesSol(){return{x:{ticks:{color:CLR.muted,font:{family:'Inter',size:10},autoSkip:true,maxTicksLimit:16},grid:{color:CLR.grid}},y:{beginAtZero:true,ticks:{color:CLR.muted,font:{family:'Inter',size:10},callback:v=>'S/ '+Math.round(v)},grid:{color:CLR.grid}}};}
 const daysIn=(y,m)=>new Date(y,m,0).getDate();
@@ -852,9 +890,45 @@ const today=new Date().toISOString().slice(0,10),tm=today.slice(0,7);
 ['mes','cpMes','gFecha','eeccMes','lnInicio'].forEach(id=>{if(document.getElementById(id))document.getElementById(id).value=tm;});
 document.getElementById('cpMes').value=tm;
 (function(){const su=getSyncUrl();const el=document.getElementById('syncUrl');if(el)el.value=su;if(su){syncStatus('Conectado. Cargando de la nube...');pullCloud(false);}const mu=localStorage.getItem('mailUrl')||'';const me=document.getElementById('mailUrl');if(me)me.value=mu;})();
+function cargarPlanInicial(){
+ if(!confirm('Esto reemplaza TODO lo que tengas cargado por los datos del plan de agosto 2026 (6 préstamos, 2 tarjetas, presupuesto meta y 3 metas). ¿Continuar?'))return;
+ S=defaults();S._ts=Date.now();persist();renderAll();pushCloud();
+ alert('Datos del plan cargados. Revisa la pestaña Deudas y ajusta las líneas de crédito de tus tarjetas.');}
+function importBackup(){document.getElementById('bkFile').click();}
+function onBackupFile(inp){const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();
+ r.onload=()=>{try{const d=JSON.parse(r.result);
+   if(!d||typeof d!=='object'||!Array.isArray(d.categorias))throw new Error('formato');
+   if(!confirm('Reemplazar todos tus datos actuales por el contenido de "'+f.name+'"?'))return;
+   S=migrate(d);S._ts=Date.now();persist();renderAll();pushCloud();
+   alert('Copia restaurada correctamente.');
+  }catch(e){alert('No se pudo leer el archivo. Debe ser un JSON exportado por esta misma app.');}
+  finally{inp.value='';}};
+ r.onerror=()=>{alert('No se pudo leer el archivo.');inp.value='';};
+ r.readAsText(f);}
 function exportData(){const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='finanzas_backup.json';a.click();}
-function resetAll(){if(confirm('¿Reiniciar todo a cero? Se borran tus movimientos, deudas y metas.')){S=defaults();save();}}
+function blank(){const b=defaults();b.cfg.titular='';b.tx=[];b.tarjetas=[];b.loans=[];b.metas=[];b.recurrentes=[];b.extra=0;
+ b.categorias.forEach(c=>{c.limite=0;});return b;}
+function resetAll(){if(confirm('¿Reiniciar todo a cero? Se borran tus movimientos, deudas, metas y límites. Los datos del plan puedes volver a cargarlos con el botón de al lado.')){S=migrate(blank());save();}}
 generateRecurrentes();syncMovForm();renderAll();
+</script>
+<script>
+/* PWA: instalable y usable sin internet. Solo aplica servido por http(s), no con file:// */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+/* Aviso si alguna librería local no cargó (carpeta vendor incompleta al subir a GitHub) */
+addEventListener('load',()=>{
+  const falta=[];
+  if(typeof Chart==='undefined')falta.push('Chart.js (gráficos)');
+  if(!window.jspdf)falta.push('jsPDF (PDF del estado de cuenta)');
+  if(typeof XLSX==='undefined')falta.push('SheetJS (Excel del estado de cuenta)');
+  if(!falta.length)return;
+  const d=document.createElement('div');
+  d.className='note warn';d.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:99;margin:0';
+  d.innerHTML='<span class="k">Falta</span>No cargó: '+falta.join(', ')+'. Revisa que subiste la carpeta <b>vendor/</b> completa junto al index.html.';
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(),12000);
+});
 </script>
 </body>
 </html>
