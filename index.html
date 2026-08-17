@@ -298,14 +298,16 @@ input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0
 /* ---------- menú con indicador que se desliza ---------- */
 /* OJO: no poner position aquí — pisaría el position:fixed del media query móvil.
    Un elemento fixed ya sirve de bloque contenedor para .ind (absolute). */
-.botnav .ind{position:absolute;top:2px;height:3px;border-radius:3px;background:var(--brand);
- transition:transform .3s cubic-bezier(.32,.72,0,1),width .3s cubic-bezier(.32,.72,0,1);pointer-events:none}
+.botnav .ind{position:absolute;left:0;top:5px;height:30px;border-radius:15px;background:var(--navy-soft);
+ transition:transform .3s cubic-bezier(.32,.72,0,1),width .28s cubic-bezier(.32,.72,0,1);
+ pointer-events:none;z-index:0}
+.botnav button{position:relative;z-index:1}
 .botnav button{transition:color .18s,transform .12s}
 .botnav button:active{transform:scale(.9)}
 .botnav button svg{transition:transform .22s cubic-bezier(.34,1.56,.64,1)}
 .botnav button.on svg{transform:translateY(-1px) scale(1.1)}
 nav.tabs{position:relative}
-nav.tabs .ind2{position:absolute;bottom:0;height:2px;background:var(--brand);
+nav.tabs .ind2{position:absolute;left:0;bottom:0;height:2px;background:var(--brand);
  transition:transform .3s cubic-bezier(.32,.72,0,1),width .3s cubic-bezier(.32,.72,0,1);pointer-events:none}
 @media(max-width:840px){nav.tabs .ind2{display:none}}
 .tab.active{border-bottom-color:transparent!important}
@@ -550,7 +552,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='2.9.1'; // se actualiza con cada mejora del sistema
+const APP_VERSION='2.9.2'; // se actualiza con cada mejora del sistema
 
 function defaults(){return {
  cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
@@ -1445,7 +1447,8 @@ addEventListener('load',()=>{
   const act=document.querySelector('.tab.active'); const v=act?act.dataset.v:'dash';
   idxActual=Math.max(0,ORD.indexOf(v));
   const b=bn&&bn.querySelector(`button[data-go="${v}"]`), ind=bn&&bn.querySelector('.ind');
-  if(b&&ind){const w=b.offsetWidth*.5;ind.style.width=w+'px';ind.style.transform=`translateX(${b.offsetLeft+b.offsetWidth/2-w/2}px)`;}
+  if(b&&ind){const w=Math.min(46,b.offsetWidth-6);ind.style.width=w+'px';
+   ind.style.transform=`translateX(${Math.round(b.offsetLeft+b.offsetWidth/2-w/2)}px)`;}
   const t=document.querySelector(`.tab[data-v="${v}"]`), i2=tabsNav&&tabsNav.querySelector('.ind2');
   if(t&&i2&&t.offsetWidth){i2.style.width=t.offsetWidth+'px';i2.style.transform=`translateX(${t.offsetLeft}px)`;}
  }
