@@ -98,6 +98,10 @@
  }
  const ojoTxt=()=>window.__ocultoSaldo?'Mostrar':'Ocultar';
  const OJO='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+ /* iconos de la cabecera en SVG: el emoji no se centra igual en iOS y en Android,
+    y encima el auditor lo marcaba como texto sin contraste. */
+ const SVG_GRAF='<svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>';
+ const SVG_CAMP='<svg viewBox="0 0 24 24"><path d="M18 15V10a6 6 0 1 0-12 0v5l-1.6 2.4A.6.6 0 0 0 4.9 19h14.2a.6.6 0 0 0 .5-1.6z"/><path d="M9.5 22a2.7 2.7 0 0 0 5 0"/></svg>';
 
  /* ---- movimientos del mes, ya ordenados ---- */
  function txMes(y,mn){ return (S.tx||[]).filter(t=>inMonth(t,y,mn))
@@ -229,17 +233,17 @@
  let pinBuf='', pinModo='abrir', pinPrimero='';
  P.login={html(){
   const n=(S.cfg.titular||'').trim().split(' ')[0]||'';
-  const tit=pinModo==='abrir'?'Hola de nuevo':pinModo==='nuevo'?'Crea tu PIN':'Repite el PIN';
+  const tit=pinModo==='abrir'?('Hola de nuevo'+(n?', '+h(n):'')):pinModo==='nuevo'?'Crea tu PIN':'Repite el PIN';
   const sub=pinModo==='abrir'
    ? 'Ingresa tu PIN para ver tu resumen de '+MES[mesSel().mn-1]+'.'
    : 'Sólo se guarda un hash, nunca el PIN, y queda en este dispositivo.';
   return '<div class="nx-login" id="nxLogin">'+
    '<div class="mk">'+h(initials(S.cfg.titular))+'</div>'+
-   '<h1>'+tit+'</h1><p>'+h(sub)+(n&&pinModo==='abrir'?' <b>'+h(n)+'</b>':'')+'</p>'+
+   '<h1>'+tit+'</h1><p>'+h(sub)+'</p>'+
    '<div class="nx-dots">'+[0,1,2,3].map(()=>'<i></i>').join('')+'</div>'+
    '<div class="msg" id="nxPinMsg"></div>'+
    '<div class="nx-keys">'+[1,2,3,4,5,6,7,8,9].map(d=>'<button data-d="'+d+'">'+d+'</button>').join('')+
-    '<button class="plain" id="nxPinCan">'+(pinModo==='abrir'?'':'Cancelar')+'</button>'+
+    (pinModo==='abrir'?'<span></span>':'<button class="plain" id="nxPinCan">Cancelar</button>')+
     '<button data-d="0">0</button><button class="plain" id="nxPinDel">⌫</button></div>'+
    (pinModo==='abrir'?'<button class="out" id="nxPinOut">¿Olvidaste tu PIN?</button>':'')+
    '</div>';
@@ -266,7 +270,7 @@
    }
   });
   $('nxPinDel').onclick=()=>{ pinBuf=pinBuf.slice(0,-1); pinta_(); msg(''); };
-  const can=$('nxPinCan'); if(can&&pinModo!=='abrir') can.onclick=()=>{ pinBuf=''; pinModo='abrir'; go('perfil'); };
+  const can=$('nxPinCan'); if(can) can.onclick=()=>{ pinBuf=''; pinModo='abrir'; go('perfil'); };
   const out=$('nxPinOut'); if(out) out.onclick=()=>{
    if(!confirm('Como el PIN sólo es una cortina de privacidad y no cifra nada, lo voy a desactivar para que NO pierdas tus datos.\n\n¿Desactivar el PIN?')) return;
    localStorage.removeItem(PIN_K); pinBuf=''; go('home');
@@ -290,7 +294,7 @@
       '<span>'+(c.dia?'Pago día '+c.dia:'')+'</span></span></button>';
   }).concat((S.cuentas||[]).map(a=>{
    const s=saldoCuenta(a.id);
-   return '<button class="nx-card" data-go="mov">'+
+   return '<button class="nx-card" data-go="cuenta" data-id="'+a.id+'">'+
     '<span class="cn"><span>'+h(a.nombre)+'</span><span class="chip"></span></span>'+
     '<span><span class="cl">Saldo registrado</span><span class="cv" style="'+(s<0?'color:var(--nx-neg)':'')+'">'+fmt(s)+'</span></span>'+
     '<span class="cf"><span>'+(s<0?'En negativo':'Débito / efectivo')+'</span></span></button>';
@@ -301,8 +305,9 @@
   return '<div class="nx-hero">'+
    '<div class="top"><div><div class="hi">Hola, '+h(n||'Jordan')+' 👋</div>'+
     '<div class="dt">'+DIAS[d.getDay()][0].toUpperCase()+DIAS[d.getDay()].slice(1)+' '+d.getDate()+' de '+MES[d.getMonth()]+'</div></div>'+
-    '<div class="acts"><button class="nx-ico" data-go="stats" aria-label="Estadísticas">📊</button>'+
-    '<button class="nx-ico" data-go="notifs" aria-label="Avisos">🔔'+(avisos().some(a=>a.n==='alto')?'<span class="dot"></span>':'')+'</button></div></div>'+
+    '<div class="acts"><button class="nx-ico" data-go="stats" aria-label="Estadísticas">'+SVG_GRAF+'</button>'+
+    '<button class="nx-ico" data-go="notifs" aria-label="Avisos">'+SVG_CAMP+
+      (avisos().some(a=>a.n==='alto')?'<span class="dot"></span>':'')+'</button></div></div>'+
    '<div class="lbl">Disponible al cierre de '+MES[mn-1]+
     '<button class="nx-eye" id="nxOjo">'+OJO+ojoTxt()+'</button></div>'+
    '<div class="big">'+oc(fmt(saldo))+'</div>'+
@@ -318,7 +323,7 @@
    '<div class="nx-carr">'+avisos().map(a=>'<div class="nx-alert '+a.n+'"><span class="i">'+a.i+'</span>'+
      '<span><b>'+a.t+'</b><span>'+a.s+'</span>'+(a.a?'<a data-go="'+a.a.k+'">'+a.a.r+'</a>':'')+'</span></div>').join('')+'</div>'+
 
-   '<div class="nx-st"><h3>Mis productos</h3><a data-go="fin">Ver todos</a></div>'+
+   '<div class="nx-st"><h3>Mis productos</h3><a data-go="tarjetas">Ver todos</a></div>'+
    '<div class="nx-prods">'+(prods.length?prods.join(''):'<div class="nx-empty">Sin productos.</div>')+'</div>'+
 
    '<div class="nx-st"><h3>Próximos pagos</h3><a data-go="pagos">Ver todos</a></div>'+
@@ -352,7 +357,7 @@
   const neto=lista.reduce((a,t)=>a+(t.tipo==='Ingreso'?1:-1)*(+t.monto||0),0);
   const chip=(k,r)=>'<button data-f="'+k+'" class="'+(movFiltro===k?'on':'')+'">'+r+'</button>';
   return '<div class="nx-top"><div class="tt"><h2>Movimientos</h2><span>'+MES[mn-1]+' '+y+'</span></div>'+
-   '<div class="rt"><button data-go="stats" aria-label="Estadísticas">📊</button></div></div>'+
+   '<div class="rt"><button data-go="stats" aria-label="Estadísticas">'+SVG_GRAF+'</button></div></div>'+
    '<div class="nx-scroll">'+
    '<div class="nx-search">🔍<input id="nxQ" placeholder="Buscar movimiento" value="'+h(movQ)+'"></div>'+
    '<div class="nx-chips">'+chip('todos','Todos')+chip('ingresos','Ingresos')+chip('gastos','Gastos')+
@@ -482,6 +487,44 @@
    reg={tipo:reg.tipo,monto:'',catId:null,cuentaVal:reg.cuentaVal,desc:''};
    pila=['mov']; pinta(1);
   };
+ }};
+
+ /* ------------------------- detalle de una cuenta ------------------------- */
+ P.cuenta={html(p){
+  const a=(S.cuentas||[]).find(x=>x.id===p.id);
+  if(!a) return barraTop('Cuenta')+'<div class="nx-scroll"><div class="nx-empty">No existe.</div></div>';
+  const sal=saldoCuenta(a.id);
+  const movs=(S.tx||[]).filter(t=>t.cuentaId===a.id)
+    .slice().sort((x,y)=>y.fecha.localeCompare(x.fecha)).slice(0,12);
+  const ing=movs.filter(t=>t.tipo==='Ingreso').reduce((s,t)=>s+(+t.monto||0),0);
+  const gas=movs.filter(t=>t.tipo!=='Ingreso').reduce((s,t)=>s+(+t.monto||0),0);
+  return barraTop(a.nombre,'Cuenta o medio de pago')+
+   '<div class="nx-scroll">'+
+   '<div class="nx-cyc"><div class="h"><span>Saldo registrado</span>'+
+     '<span class="tag'+(sal>=0?' ok':'')+'">'+(sal>=0?'En positivo':'En negativo')+'</span></div>'+
+    '<div class="big">'+fmt2(sal)+'</div>'+
+    '<div class="two"><div><span>Entradas</span><b>'+fmt(ing)+'</b></div>'+
+     '<div><span>Salidas</span><b>'+fmt(gas)+'</b></div></div>'+
+    '<div class="pie">Sale de lo que anotas en la app, no del banco</div></div>'+
+   '<div class="nx-st"><h3>Movimientos de esta cuenta</h3></div>'+
+   '<div class="nx-box">'+(movs.length?movs.map(filaTx).join(''):'<div class="nx-empty">Sin movimientos.</div>')+'</div>'+
+   (sal<0?'<div class="nx-tip nxw"><span>ℹ️</span><span>Está en negativo porque anotaste más salidas que '+
+     'entradas en esta cuenta. Si el banco te dice otra cosa, falta registrar un ingreso.</span></div>':'')+
+   '</div>';
+ }};
+
+ /* ---------------------- todas las cuentas (Finanzas) ---------------------- */
+ P.cuentas={html(){
+  const cs=(S.cuentas||[]);
+  return barraTop('Cuentas',cs.length+' medio'+(cs.length===1?'':'s')+' de pago')+
+   '<div class="nx-scroll"><div class="nx-box">'+(cs.length?cs.map(a=>{
+    const sal=saldoCuenta(a.id);
+    return '<button class="nx-row" data-go="cuenta" data-id="'+a.id+'"><span class="av">'+
+     (/yape|plin/i.test(a.nombre)?'📲':/efectivo/i.test(a.nombre)?'💵':/d[eé]bito/i.test(a.nombre)?'💳':'🏦')+'</span>'+
+     '<span class="tx"><b>'+h(a.nombre)+'</b><span>saldo registrado</span></span>'+
+     '<span class="am"><b class="'+(sal<0?'':'nx-in')+'" style="'+(sal<0?'color:var(--nx-neg)':'')+'">'+fmt(sal)+'</b></span>'+
+     '<span class="ar">›</span></button>';
+   }).join(''):'<div class="nx-empty">Sin cuentas.</div>')+'</div></div>';
  }};
 
  /* ------------------------------- Tarjetas ------------------------------- */
@@ -851,6 +894,8 @@
     '<div class="pie">'+(S.loans||[]).length+' préstamos · '+(S.tarjetas||[]).length+' tarjetas</div></div>'+
    '<div class="nx-box">'+
     fila('tarjetas','💳','Tarjetas',(S.tarjetas||[]).length+' activas',fmt(tarj))+
+    fila('cuentas','🏦','Cuentas',(S.cuentas||[]).length+' medios de pago',
+      fmt((S.cuentas||[]).reduce((a,x)=>a+saldoCuenta(x.id),0)))+
     fila('deudas','📄','Préstamos',(S.loans||[]).length+' en curso',fmt(loan))+
     fila('metas','🎯','Metas',(S.metas||[]).length+' activas',fmt(ya))+
     fila('pagos','📅','Próximos pagos',pend+' pendientes','')+
@@ -903,7 +948,6 @@
  const SUB=[
   {g:'Mi cuenta',k:'p_perfil',ic:'👤',r:'Perfil e ingreso',s:'Nombre, sueldo, AFP y saldo inicial'},
   {g:'Mi cuenta',k:'p_cuentas',ic:'🏦',r:'Cuentas y tarjetas',s:'Medios de pago y líneas'},
-  {g:'Finanzas',k:'p_estrategia',ic:'🧮',r:'Estrategia de pago',s:'Avalancha o bola de nieve'},
   {g:'Finanzas',k:'p_eecc',ic:'📄',r:'Estado de cuenta mensual',s:'PDF y Excel al correo'},
   {g:'Finanzas',k:'p_recurrentes',ic:'🔁',r:'Recurrentes y favoritos',s:'Lo que se repite cada mes'},
   {g:'Finanzas',k:'p_calendario',ic:'🗓️',r:'Calendario',s:'Gasto día por día'},
@@ -943,7 +987,6 @@
  P.p_cuentas  =subMover('Cuentas y tarjetas','Medios de pago y líneas',
    ['#ctaBody|.tablewrap','#cardBody|.tablewrap'],
    '<div class="nx-tip"><span>ℹ️</span><span>Las tablas de siempre, con sus mismos campos editables.</span></div>');
- P.p_estrategia=subMover('Estrategia de pago','Avalancha o bola de nieve',['#stratOut|.box']);
  P.p_eecc     =subMover('Estado de cuenta mensual','PDF y Excel al correo',
    ['#eeccStatus|.box','#eeccPrev']);
  P.p_recurrentes=subMover('Recurrentes y favoritos','Lo que se repite',
@@ -992,9 +1035,20 @@
  };
  const NAVROT={home:'Inicio',mov:'Movimientos',pres:'Presupuesto',fin:'Finanzas',perfil:'Perfil'};
 
+ function apagarViejo(){
+  /* BUG REPORTADO: la app pedía el PIN dos veces. El #lock de la v2.9 se
+     enciende solo al cargar; aquí se le quita la clase y se vigila que no
+     vuelva, además del display:none del CSS. */
+  const l=$('lock'); if(!l) return;
+  l.classList.remove('on','err');
+  try{ new MutationObserver(()=>{ if(l.classList.contains('on')) l.classList.remove('on'); })
+    .observe(l,{attributes:true,attributeFilter:['class']}); }catch(e){}
+ }
+
  function montar(){
   if($('nx')) return;
   document.body.classList.add('nx-on');
+  apagarViejo();
   const root=document.createElement('div'); root.id='nx';
   root.innerHTML='<div id="nx-body"></div>'+
    '<nav class="nx-nav" id="nx-nav">'+RAIZ.map(k=>
