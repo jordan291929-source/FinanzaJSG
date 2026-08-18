@@ -1832,6 +1832,13 @@
   return o?o.id:((S.categorias||[])[0]||{}).id;
  }
 
+ /** ¿Ya existe un movimiento del mismo día y monto? Sus datos tienen cosas
+     tecleadas a mano, así que el correo puede ser el mismo gasto ya anotado. */
+ function yaParecido(m){
+  return (S.tx||[]).find(t => t.fecha===m.fecha &&
+    Math.abs((+t.monto||0)-(+m.monto||0))<0.01 && t.correoK!==m.id);
+ }
+
  /* elecciones que él cambia antes de anotar: {catId, destino} por id de correo */
  let bndEleccion={};
  const eleccionDe=m=>{
@@ -1925,6 +1932,10 @@
     '<div class="cp">'+h(m.concepto||'Movimiento')+'</div>'+
     '<div class="fe">'+etiquetaFecha(m.fecha)+' · '+h(m.detalle||m.banco)+
       (esTras?' · <b>traslado entre lo tuyo</b>':'')+'</div>'+
+    (()=>{ const y=yaParecido(m); return y
+      ? '<div class="nt ojo">⚠️ Ya tienes anotado <b>'+h((y.concepto||'algo').slice(0,28))+
+        '</b> por '+fmt2(y.monto)+' ese mismo día. Míralo antes de anotar, para no contarlo dos veces.</div>'
+      : ''; })()+
     (esTras
      ? '<div class="nt">Mover plata de un bolsillo a otro no es un gasto, así que esto '+
        '<b>no cambia tus totales</b>. Descártalo cuando lo hayas visto.</div>'+
@@ -1985,9 +1996,13 @@
    const e=eleccionDe(m), cat=catById(e.catId), mm=mesSel();
    const dest=e.dest.tipo==='pagoCard'?'pago de '+e.dest.rot:e.dest.rot;
    const r=simular(()=>anotarCorreo(m));
+   const y=yaParecido(m);
    confirmar({titulo:'¿Anotar este movimiento?',boton:'Sí, anotar',
      detalle:'<div><b>'+h(m.concepto||'Movimiento')+'</b> · '+fmt2(m.monto)+' el '+fechaCorta(m.fecha)+
       '<br>'+(cat?'Categoría '+h(cat.nombre.split(' (')[0])+' · ':'')+h(dest)+'</div>'+
+      (y?'<div style="color:var(--nx-warn);margin-top:6px">Ojo: ya tienes <b>'+
+        h((y.concepto||'algo').slice(0,28))+'</b> por '+fmt2(y.monto)+' ese día. '+
+        'Si es el mismo gasto, cancela y descártalo.</div>':'')+
       lineaCambio('Deuda total',r.deudaA,r.deudaB)+
       lineaCambio('Disponible del mes',r.cajaA,r.cajaB)},()=>{
     const antes=JSON.stringify(S);
