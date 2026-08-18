@@ -33,10 +33,7 @@ function doGet(e) {
   if (!claveOk_(e)) return json_({ error: 'clave incorrecta' });
 
   // Bandeja de correos del banco (ver Correos.gs). Solo lee Gmail, no toca tus datos.
-  if (e && e.parameter && e.parameter.bandeja) {
-    try { return json_({ ok: true, bandeja: bandeja_(+e.parameter.dias || 0) }); }
-    catch (err) { return json_({ ok: false, error: String(err) }); }
-  }
+  if (e && e.parameter && e.parameter.bandeja) return respuestaBandeja_(e.parameter.dias);
 
   const f = archivo_();
   // Sin archivo aún -> {} : la app lo entiende como "la nube está vacía".
@@ -52,7 +49,7 @@ function doPost(e) {
   catch (err) { return json_({ ok: false, error: 'json invalido' }); }
 
   if (d && d.action === 'email') return enviarCorreo_(d);
-  if (d && d.action === 'archivar') return archivar_(d.ids);   // ver Correos.gs
+  if (d && d.action === 'archivar') return archivarCorreos_(d.ids);   // ver Correos.gs
   return guardar_(cuerpo, d);
 }
 

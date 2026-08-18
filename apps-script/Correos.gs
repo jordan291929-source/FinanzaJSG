@@ -1,6 +1,10 @@
 /**
  * Finanzas Personales — lector de correos del banco.
  *
+ * AUTOSUFICIENTE: no necesita nada del otro archivo. Guarda lo ya resuelto en
+ * las propiedades del script (no en Drive), así el único permiso que Google
+ * pide es LEER GMAIL.
+ *
  * Lee las notificaciones que BCP, Yape e Interbank te mandan por cada
  * operación y las deja listas como movimientos para que los confirmes
  * en la app. NO escribe nada en tus finanzas: solo llena una bandeja.
@@ -9,6 +13,13 @@
  *   GET  ?k=CLAVE&bandeja=1        -> lista de movimientos detectados
  *   GET  ?k=CLAVE&bandeja=1&dias=30 -> ídem, mirando 30 días atrás
  *   POST {action:'archivar', ids:[...]}  -> los marca como resueltos
+ *
+ * ENGANCHE (dos trozos que van en tu doGet y tu doPost):
+ *   doGet:   if (e && e.parameter && e.parameter.bandeja) return respuestaBandeja_(e.parameter.dias);
+ *   doPost:  var _d=null; try{ _d=JSON.parse(e.postData.contents); }catch(x){}
+ *            if (_d && _d.action==='archivar') return archivarCorreos_(_d.ids);
+ *   OJO: en doPost va ANTES de guardar los datos, o el aviso de archivado
+ *   se guardaría como si fueran tus finanzas.
  *
  * Pega este archivo COMPLETO como un segundo archivo del proyecto
  * (Apps Script -> + -> Secuencia de comandos -> nómbralo "Correos").
@@ -20,9 +31,11 @@
 /** Cuántos días atrás mirar por defecto. */
 const DIAS = 14;
 
-/** Archivo donde se recuerda qué operaciones ya resolviste,
- *  para que no vuelvan a aparecer nunca más. */
-const VISTOS = 'correos-vistos.json';
+/** Clave donde se recuerda qué operaciones ya resolviste, para que no
+ *  vuelvan a aparecer nunca más. Vive en las propiedades del script. */
+const VISTOS_K = 'correosVistos';
+/** Cuántos ids se recuerdan (los más viejos se olvidan). */
+const VISTOS_MAX = 600;
 
 /** Remitentes que sí son notificaciones de operaciones.
  *  Todo lo demás (publicidad, promociones) se ignora. */
@@ -200,32 +213,46 @@ function interpretar_(m) {
 /* ============================== ARCHIVAR ============================== */
 
 /** Marca operaciones como resueltas para que no vuelvan a la bandeja. */
-function archivar_(ids) {
-  if (!ids || !ids.length) return json_({ ok: true, archivados: 0 });
+function archivarCorreos_(ids) {
+  if (!ids || !ids.length) return jsonCorreos_({ ok: true, archivados: 0 });
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(15000)) return json_({ ok: false, error: 'ocupado' });
+  if (!lock.tryLock(15000)) return jsonCorreos_({ ok: false, error: 'ocupado' });
   try {
     const v = leerVistos_();
     const hoy = new Date().toISOString().slice(0, 10);
     ids.forEach(function (id) { if (id) v[id] = hoy; });
     guardarVistos_(v);
-    return json_({ ok: true, archivados: ids.length });
+    return jsonCorreos_({ ok: true, archivados: ids.length });
   } finally { lock.releaseLock(); }
 }
 
+/** Respuesta JSON propia, para no depender del otro archivo. */
+function jsonCorreos_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/** El enganche que va en doGet. Devuelve la bandeja lista para la app.
+ *  `archivar: true` le dice a la app que este script SÍ sabe archivar, así
+ *  no manda un POST que un script viejo confundiría con datos. */
+function respuestaBandeja_(dias) {
+  try { return jsonCorreos_({ ok: true, archivar: true, bandeja: bandeja_(+dias || 0) }); }
+  catch (err) { return jsonCorreos_({ ok: false, error: String(err) }); }
+}
+
 function leerVistos_() {
-  const it = carpeta_().getFilesByName(VISTOS);
-  if (!it.hasNext()) return {};
-  try { return JSON.parse(it.next().getBlob().getDataAsString('UTF-8')) || {}; }
+  try { return JSON.parse(PropertiesService.getScriptProperties()
+    .getProperty(VISTOS_K) || '{}') || {}; }
   catch (e) { return {}; }
 }
 
 function guardarVistos_(v) {
-  const carpeta = carpeta_();
-  const txt = JSON.stringify(v);
-  const it = carpeta.getFilesByName(VISTOS);
-  if (it.hasNext()) it.next().setContent(txt);
-  else carpeta.createFile(VISTOS, txt, MimeType.PLAIN_TEXT);
+  const ks = Object.keys(v);
+  if (ks.length > VISTOS_MAX) {           // se olvidan los más antiguos
+    ks.sort(function (a, b) { return String(v[a]) < String(v[b]) ? -1 : 1; });
+    ks.slice(0, ks.length - VISTOS_MAX).forEach(function (k) { delete v[k]; });
+  }
+  PropertiesService.getScriptProperties().setProperty(VISTOS_K, JSON.stringify(v));
 }
 
 /* ============================= AUXILIARES ============================= */
