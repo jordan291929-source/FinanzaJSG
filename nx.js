@@ -1759,7 +1759,7 @@
   return u+(u.indexOf('?')>=0?'&':'?')+'bandeja=1&dias='+(dias||14)+'&t='+Date.now();
  };
  /* estado en memoria de la pantalla */
- let bnd={fase:'nada', items:[], error:'', dias:14};
+ let bnd={fase:'nada', items:[], error:'', dias:14, puedeArchivar:false};
 
  const bndVistos=()=>{ S.cfg.correosVistos=S.cfg.correosVistos||[]; return S.cfg.correosVistos; };
  const bndCache=()=>{ S.cfg.correosCache=S.cfg.correosCache||{ts:0,n:0}; return S.cfg.correosCache; };
@@ -1776,6 +1776,11 @@
    }
    if(d && d.error) throw new Error(String(d.error));
    if(!d || !d.bandeja) throw new Error('Falta pegar Correos.gs en tu Apps Script: la nube no trae bandeja.');
+   /* SEGURO IMPORTANTE: solo se avisa a la nube de lo archivado si ella dijo
+      que sabe hacerlo. Su script de sincronización guarda en una celda TODO lo
+      que llega por POST, así que un aviso de archivado en un script sin el
+      enganche le sobreescribiría la copia de la nube. */
+   bnd.puedeArchivar=(d.archivar===true);
    const ya=bndVistos();
    bnd.items=(d.bandeja||[]).filter(m=>m && m.id && ya.indexOf(m.id)<0);
    bnd.fase='listo';
@@ -1869,6 +1874,7 @@
   ids.forEach(i=>{ if(v.indexOf(i)<0) v.push(i); });
   if(v.length>400) S.cfg.correosVistos=v.slice(-400);
   try{ persist(); }catch(e){}
+  if(!bnd.puedeArchivar) return;      // ver el seguro de arriba
   let u=''; try{ u=getSyncUrl()||''; }catch(e){}
   if(!u) return;
   fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
