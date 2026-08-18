@@ -33,7 +33,8 @@ function doGet(e) {
   if (!claveOk_(e)) return json_({ error: 'clave incorrecta' });
 
   // Bandeja de correos del banco (ver Correos.gs). Solo lee Gmail, no toca tus datos.
-  if (e && e.parameter && e.parameter.bandeja) return respuestaBandeja_(e.parameter.dias);
+  if (e && e.parameter && e.parameter.bandeja)
+    return respuestaBandeja_(e.parameter.dias, e.parameter.fresco);
 
   const f = archivo_();
   // Sin archivo aún -> {} : la app lo entiende como "la nube está vacía".
@@ -50,6 +51,7 @@ function doPost(e) {
 
   if (d && d.action === 'email') return enviarCorreo_(d);
   if (d && d.action === 'archivar') return archivarCorreos_(d.ids);   // ver Correos.gs
+  if (d && d.action === 'desarchivar') return desarchivarCorreos_(d.ids);   // deshacer
   return guardar_(cuerpo, d);
 }
 

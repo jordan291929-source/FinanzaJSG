@@ -45,7 +45,8 @@ Arriba del archivo hay esta línea:
 const CLAVE = 'cambia-esto-por-algo-tuyo-largo-2026';
 ```
 
-Reemplázala por cualquier texto largo tuyo, **sin espacios ni tildes**. Por ejemplo `jsg-finanzas-8471-lima`. Anótala, la necesitas en el paso 6.
+Reemplázala por cualquier texto largo tuyo, **sin espacios ni tildes**. Por ejemplo `mi-clave-larga-y-unica-2026`. Anótala, la necesitas en el paso 6.
+**No pongas la tuya en ningún archivo del repositorio**: esta guía es pública.
 
 Guarda con el icono del disquete (o `Ctrl+S`).
 
@@ -76,7 +77,7 @@ Pide dos permisos: Drive (para guardar el archivo) y Gmail (para enviarte el est
 Al terminar te da una **URL de la aplicación web** que termina en `/exec`. Cópiala y **pégale tu clave al final**:
 
 ```
-https://script.google.com/macros/s/AKfycb.../exec?k=jsg-finanzas-8471-lima
+https://script.google.com/macros/s/AKfycb.../exec?k=TU-CLAVE
 ```
 
 Esa URL completa —con el `?k=` incluido— es la que va en la app.
