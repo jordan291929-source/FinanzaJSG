@@ -2318,10 +2318,14 @@
     una lista de operaciones. Aquí NO se calcula nada: cada movimiento que él
     aprueba se registra con las funciones del motor (addMov / addCardPayment),
     igual que si lo tecleara. Nada entra sin que lo confirme. */
- const urlBandeja=dias=>{
+ /* fresco=1 le dice al script que NO use su caché de 5 minutos. Se manda
+    cuando ÉL pide leer: si acaba de yapear, el correo tiene que salir ya. La
+    revisión automática al abrir la app sí usa la caché, para no tardar 20 s. */
+ const urlBandeja=(dias,fresco)=>{
   let u=''; try{ u=getSyncUrl()||''; }catch(e){ u=''; }
   if(!u) return '';
-  return u+(u.indexOf('?')>=0?'&':'?')+'bandeja=1&dias='+(dias||14)+'&t='+Date.now();
+  return u+(u.indexOf('?')>=0?'&':'?')+'bandeja=1&dias='+(dias||14)+
+   (fresco?'&fresco=1':'')+'&t='+Date.now();
  };
  /* estado en memoria de la pantalla */
  let bnd={fase:'nada', items:[], error:'', dias:14, puedeArchivar:false};
@@ -2342,8 +2346,8 @@
  }
  const contadorOff=()=>clearInterval(bndTimer);
 
- function traerBandeja(){
-  const u=urlBandeja(bnd.dias);
+ function traerBandeja(fresco){
+  const u=urlBandeja(bnd.dias,fresco);
   if(!u){ bnd={fase:'sinurl',items:[],error:'',dias:bnd.dias}; return Promise.resolve(); }
   bnd.fase='cargando'; bnd.error='';
   const corta=new AbortController();
@@ -2364,7 +2368,7 @@
    bnd.puedeArchivar=(d.archivar===true);
    const ya=bndVistos();
    bnd.items=(d.bandeja||[]).filter(m=>m && m.id && ya.indexOf(m.id)<0);
-   bnd.fase='listo';
+   bnd.fase='listo'; bnd.leido=Date.now(); bnd.fresco=!!fresco;
    const c=bndCache(); c.ts=Date.now(); c.n=bnd.items.length;
    try{ persist(); }catch(e){}
   }).catch(e=>{
@@ -2372,7 +2376,7 @@
    bnd.fase='error';
    bnd.error = (e && e.name==='AbortError')
     ? 'Tu script tardó más de 90 segundos y corté la espera. Vuelve a intentar: '+
-      'la segunda vez suele ser instantánea porque la nube guarda el resultado 5 minutos.'
+      'esta vez uso lo último que alcanzó a leer la nube, así que suele ser instantáneo.'
     : (e.message||String(e));
   }).finally(()=>contadorOff());
  }
@@ -2584,7 +2588,11 @@
   const n=bndSelN();
   return cab+'<div class="nx-scroll'+(bndModo?' conbarra':'')+'">'+
    (bnd.items.length===0
-    ? '<div class="nx-empty">Nada nuevo en tus correos de los últimos '+bnd.dias+' días.</div>'
+    ? '<div class="nx-empty">Nada nuevo en tus correos de los últimos '+bnd.dias+' días.'+
+      (bnd.leido?'<br><span style="font-size:11.5px">'+
+        (bnd.fresco?'Buzón leído recién, sin usar lo guardado.'
+         :'Puede ser lo que la nube guardó hace un rato; toca «Volver a leer» para mirar el buzón de nuevo.')+
+        '</span>':'')+'</div>'
     : (bndModo
        ? '<div class="nx-tip"><span>☑️</span><span>Toca los que ya revisaste por tu cuenta y márcalos '+
          'como <b>vistos</b>: no se anota nada y dejan de aparecer.</span></div>'
@@ -2612,9 +2620,11 @@
  },wire(){
   if(bnd.fase==='cargando') contadorOn();
   const leer=$('nxBndLeer');
-  if(leer) leer.onclick=()=>{ vib(8); bndLimpiarSel(); const q=traerBandeja(); pinta(0); q.then(()=>pinta(0)); };
+  /* tras un corte se reintenta con la caché (rápido); si no, lectura fresca */
+  const fresco=bnd.fase!=='error';
+  if(leer) leer.onclick=()=>{ vib(8); bndLimpiarSel(); const q=traerBandeja(fresco); pinta(0); q.then(()=>pinta(0)); };
   const mas=$('nxBndMas');
-  if(mas) mas.onclick=()=>{ vib(8); bnd.dias=60; const q=traerBandeja(); pinta(0); q.then(()=>pinta(0)); };
+  if(mas) mas.onclick=()=>{ vib(8); bnd.dias=60; const q=traerBandeja(fresco); pinta(0); q.then(()=>pinta(0)); };
 
   const ini=$('nxSelIni'); if(ini) ini.onclick=()=>{ vib(8); bndModo=true; bndSel={}; pinta(0); };
   const fin=$('nxSelFin'); if(fin) fin.onclick=()=>{ vib(8); bndLimpiarSel(); pinta(0); };
