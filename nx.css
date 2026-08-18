@@ -431,6 +431,11 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
 .nx-mail .fe{font-size:11.5px;color:var(--nx-mut);margin-top:2px}
 .nx-mail .nt{font-size:11.5px;color:var(--nx-mut);margin-top:8px;line-height:1.45}
 .nx-mail .nt.ojo{color:var(--nx-warn);background:var(--nx-warnS);border-radius:10px;padding:8px 10px}
+/* propuesta de conciliación: el cargo real de un consumo que ya está anotado
+   como estimado. No es un gasto nuevo, y se ve distinto para que no se confunda. */
+.nx-mail.conc{border-color:var(--nx-brand);box-shadow:0 0 0 1px var(--nx-brand) inset}
+.nx-mail.conc .b{color:var(--nx-brand)}
+.nx-mail.conc .nt{color:var(--nx-ink2);background:var(--nx-surf2);border-radius:10px;padding:8px 10px}
 .nx-mail .ch{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .nx-mail .chip{background:var(--nx-surf2);border:1px solid var(--nx-line);border-radius:20px;
  padding:7px 11px;min-height:32px;font-size:11.5px;font-weight:600;color:var(--nx-ink)}
@@ -566,4 +571,20 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
 #nx-toast{touch-action:pan-y}
 @media(prefers-color-scheme:dark){
  #nx-toast{background:var(--nx-surf2);color:var(--nx-ink);border:1px solid var(--nx-line)}
+
+ /* En oscuro el degradado de marca es CLARO (#4fbec4): el texto blanco encima
+    daba 2.2:1, ilegible. Va tinta oscura sobre el degradado → ~9:1.
+    Lo encontró la pasada en oscuro del auditor, que antes no existía. */
+ .nx-go,#nx #nxSub button:not([class]){color:#06231f;
+  background:linear-gradient(140deg,var(--nx-brand),#2f9aa2);
+  box-shadow:0 8px 20px -12px rgba(0,0,0,.8)}
+ .nx-go.mal{color:#fff;background:linear-gradient(140deg,#c9314a,#8d1b2d)}
+ .nx-mail .bt .ok{color:#06231f;background:linear-gradient(140deg,var(--nx-brand),#2f9aa2)}
+
+ /* Bloques prestados de la app vieja: sus grises de tema oscuro quedan por
+    debajo del mínimo. Se les pasa la tinta apagada de NEXO (4.9:1).
+    OJO: solo dentro de [data-nx-home], que marca lo prestado. Aplicarlo a todo
+    #nx dejó los teclados numéricos con tinta oscura sobre fondo oscuro (1.04:1). */
+ #nx [data-nx-home] :where(label,.hint,.amt,.h,.lbl,.lft,.empty,small,.sub,th,td){color:var(--nx-mut)}
+ #nx [data-nx-home] button:not([class]){color:#06231f}
 }

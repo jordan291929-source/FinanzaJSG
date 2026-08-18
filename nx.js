@@ -145,15 +145,51 @@
     Pedido suyo. Nada de esto cambia un cálculo: sólo intercepta las funciones
     del motor para avisar antes, y guarda una copia del estado para revertir. */
 
- /* mide el efecto real de una acción sin dejar rastro: aplica, mide, revierte */
+ /* Mide el efecto real de una acción sin dejar rastro: aplica, mide, revierte.
+
+    OJO, ESTO ERA UN BUG SERIO: revertía S en memoria, pero la acción simulada
+    pasaba por save() del motor, y save() hace persist() (escribe localStorage)
+    y pushCloud() (¡sube el estado a su Drive!). Abrir la confirmación de un
+    correo y luego CANCELAR dejaba el movimiento guardado y subido. Ahora
+    durante la simulación se silencian el guardado, la nube, el repintado y
+    cualquier fetch, y se restauran los campos del formulario del motor. */
+ const CAMPOS_MOTOR=['mFecha','mTipo','mCat','mCuenta','mConcepto','mMonto','mCuotas','mTea',
+   'payCard','payFecha','payMonto'];
  function simular(mut){
   const copia=JSON.stringify(S), m=mesSel();
+  const forma=CAMPOS_MOTOR.map(id=>{ const e=$(id); return e?[e,e.value]:null; }).filter(Boolean);
+  const orig={};
+  ['persist','save','pushCloud','renderAll','fetch'].forEach(k=>{ orig[k]=window[k]; });
+  window.persist=()=>{}; window.save=()=>{}; window.pushCloud=()=>{}; window.renderAll=()=>{};
+  window.fetch=()=>Promise.reject(new Error('simulación: sin red'));
   const r={deudaA:deudaTotal(), cajaA:saldoHasta(m.y,m.mn)};
   try{ mut(); r.deudaB=deudaTotal(); r.cajaB=saldoHasta(m.y,m.mn); }
   catch(e){ r.deudaB=r.deudaA; r.cajaB=r.cajaA; }
-  finally{ S=JSON.parse(copia); }
+  finally{
+   S=JSON.parse(copia);
+   Object.keys(orig).forEach(k=>{ window[k]=orig[k]; });
+   forma.forEach(([e,v])=>{ e.value=v; });
+  }
   return r;
  }
+
+ /* Deshacer de verdad.
+
+    OTRO BUG SERIO: Deshacer restauraba S y hacía persist(), pero NO volvía a
+    subir a la nube. La nube se quedaba con la versión que sí tenía el
+    movimiento, así que el siguiente pullCloud lo traía de vuelta: el usuario
+    veía reaparecer algo que ya había deshecho. Ahora toda reversión persiste
+    localmente Y sincroniza, igual que save(). */
+ function revertir(antes, extra){
+  S=JSON.parse(antes);
+  if(typeof extra==='function'){ try{ extra(); }catch(e){} }
+  S._ts=Date.now();
+  try{ persist(); }catch(e){}
+  try{ renderAll(); }catch(e){}
+  try{ pushCloud(); }catch(e){}
+  pinta(0);
+ }
+
  function lineaCambio(rot,a,b){
   if(Math.abs(a-b)<0.5) return '';
   return '<div class="cifras"><span class="fl">'+rot+'</span>'+
@@ -295,7 +331,7 @@
  /* ---- avisos ---- */
  function avisos(){
   const m=mesSel(), y=m.y, mn=m.mn;
-  const I=ingresoMensual(), cuotas=cuotasMes(y,mn), saldo=saldoHasta(y,mn), av=[];
+  const I=ingresoMensual(), cuotas=cuotasMes(y,mn), saldo=saldoHastaExacto(y,mn), av=[];
   if(saldo<0) av.push({n:'alto',i:'🔴',t:'Cierras '+MES[mn-1]+' en rojo: '+fmt(saldo),
    s:'Después de las cuotas del mes te falta plata.',a:{r:'Ver qué pagar →',k:'pagos'}});
   if(I>0 && cuotas/I>0.30) av.push({n:'alto',i:'⚠️',
@@ -316,10 +352,12 @@
     s:fmt(usa)+' de '+fmt(lim)+'.',a:{r:'Revisar presupuesto →',k:'pres'}});
   });
   (S.tarjetas||[]).forEach(c=>{
-   const li=+c.linea||0, us=consumidoCard(c);
-   if(li>0&&us/li>0.80) av.push({n:'medio',i:'💳',
-    t:h(c.nombre)+' al '+Math.round(us/li*100)+'% de su línea',
-    s:'Te queda '+fmt(Math.max(0,li-us))+' de '+fmt(li)+'.',a:{r:'Ver tarjeta →',k:'tarjetas'}});
+   const li=+c.linea||0, us=consumidoCardExacto(c), ce=estimadoCard(c);
+   if(li>0&&(us+ce)/li>0.80) av.push({n:'medio',i:'💳',
+    t:h(c.nombre)+' al '+Math.round((us+ce)/li*100)+'% de su línea',
+    s:'Te queda '+fmt(Math.max(0,li-us))+' de '+fmt(li)+
+      (ce>0.5?', y hay '+fmt2(ce)+' estimado sin confirmar.':'.'),
+    a:{r:'Ver tarjeta →',k:'tarjetas'}});
   });
   const huer=recurrentesHuerfanos();
   if(huer.length){
@@ -328,6 +366,16 @@
     t:'Faltan '+huer.length+' cargo'+(huer.length===1?'':'s')+' fijo'+(huer.length===1?'':'s')+' de '+MES[mn-1]+': '+fmt(sumaH),
     s:huer.map(r=>r.concepto).join(', ')+'. La app los dio por registrados pero no est\u00e1n.',
     a:{r:'Revisar y registrar \u2192',k:'huerfanos'}});
+  }
+  const pc=porConciliar();
+  if(pc.length){
+   const su=pc.reduce((a,t)=>a+(+t.monto||0),0);
+   av.push({n:'medio',i:'≈',
+    t:pc.length+' gasto'+(pc.length===1?'':'s')+' en dólares sigue'+(pc.length===1?'':'n')+
+      ' estimado'+(pc.length===1?'':'s')+': '+fmt(su),
+    s:pc.map(t=>t.concepto).slice(0,3).join(', ')+'. Cuando llegue el cargo real, ajústalo para '+
+      'que tu deuda quede exacta.',
+    a:{r:'Ver el movimiento →',k:'txd',id:pc[0].id}});
   }
   const bc=(S.cfg&&S.cfg.correosCache)||null;
   if(bc && bc.n>0) av.push({n:'medio',i:'📬',
@@ -348,7 +396,7 @@
    if(d>=4) av.push({n:'medio',i:'📝',t:'Llevas '+d+' días sin anotar un movimiento',
     s:'Lo que gastaste en esos días existe igual; sólo no está acá.',a:{r:'Anotar ahora →',k:'reg'}}); }
   if(!av.length){
-   const g=gastoMes(y,mn), pv=prevMV(y,mn), ga=gastoMes(pv[0],pv[1]);
+   const g=gastoMesExacto(y,mn), pv=prevMV(y,mn), ga=gastoMesExacto(pv[0],pv[1]);
    if(ga>0&&g<ga) av.push({n:'bueno',i:'✅',t:'Gastaste '+fmt(ga-g)+' menos que en '+MES[pv[1]-1],
     s:fmt(g)+' contra '+fmt(ga)+'.',a:{r:'Ver estadísticas →',k:'stats'}});
    else av.push({n:'bueno',i:'✅',t:'Nada urgente hoy',
@@ -360,7 +408,7 @@
 
  /* ============================ ciclo de tarjeta ============================
     El cronograma oficial del BCP (variante "cierre de facturación 25") que
-    Jordan pasó. Cada fila: mes de facturación → [inicio, cierre, fecha de pago].
+    manda el banco. Cada fila: mes de facturación → [inicio, cierre, fecha de pago].
     OJO con lo que revela: el pago NO es "el 20 de cada mes". Los consumos del
     25-jul al 25-ago se pagan el 22-set, y el día varía entre 20 y 23 porque el
     banco lo corre al siguiente día útil. */
@@ -517,24 +565,25 @@
  /* ------------------------------- Inicio ------------------------------- */
  P.home={html(){
   const m=mesSel(), y=m.y, mn=m.mn;
-  const saldo=saldoHasta(y,mn), n=(S.cfg.titular||'').trim().split(' ')[0]||'';
+  const saldo=saldoHastaExacto(y,mn), n=(S.cfg.titular||'').trim().split(' ')[0]||'';
   const d=new Date();
-  const ing=ingresoRealMes(y,mn), gas=gastoMes(y,mn);
+  const ing=ingresoRealMes(y,mn), gas=gastoMesExacto(y,mn), gasEst=gastoMesEstimado(y,mn);
   const metaYa=(S.metas||[]).reduce((a,g)=>a+(+g.ahorrado||0),0);
   const m2=mesSel();
   const prods=(S.tarjetas||[]).map((c,i)=>{
-   const li=+c.linea||0, us=consumidoCard(c), st=cardMonthStatus(c,m2.y,m2.mn);
+   const li=+c.linea||0, us=consumidoCardExacto(c), st=cardMonthStatus(c,m2.y,m2.mn);
+   const ce=estimadoCard(c);
    return '<button class="nx-card credito'+(i%2?' alt':'')+'" data-go="tarjeta" data-id="'+c.id+'">'+
     '<span class="cn"><span>'+h(c.nombre)+'</span><span class="chip"></span></span>'+
     '<span><span class="cl">Línea disponible</span><span class="cv">'+fmt(Math.max(0,li-us))+'</span></span>'+
-    '<span class="cf"><span>Usado '+fmt(us)+'</span>'+
+    '<span class="cf"><span>Usado '+fmt(us)+(ce>0.5?' + '+fmt(ce)+' estim.':'')+'</span>'+
       '<span>'+(st.falta>0.5?'Vence día '+(c.dia||20):'Al día')+'</span></span></button>';
   });
   const vs=vencs().filter(v=>v.falta>0.5).slice(0,3);
   const ms=(S.metas||[]).slice(0,4);
   const ult=txMes(y,mn).slice(0,4);
   return '<div class="nx-hero">'+
-   '<div class="top"><div><div class="hi">Hola, '+h(n||'Jordan')+' 👋</div>'+
+   '<div class="top"><div><div class="hi">Hola'+(n?', '+h(n):'')+' 👋</div>'+
     '<div class="dt">'+DIAS[d.getDay()][0].toUpperCase()+DIAS[d.getDay()].slice(1)+' '+d.getDate()+' de '+MES[d.getMonth()]+'</div></div>'+
     '<div class="acts"><button class="nx-ico" data-go="stats" aria-label="Estadísticas">'+SVG_GRAF+'</button>'+
     (()=>{ const av=avisos(), n=av.length;
@@ -549,7 +598,8 @@
    '<div class="nx-scroll">'+
    '<div class="nx-stats">'+
     '<div class="nx-stat"><div class="k"><i style="background:var(--nx-pos)"></i>Ingresos</div><div class="v nx-num">'+fmt(ing)+'</div></div>'+
-    '<div class="nx-stat"><div class="k"><i style="background:var(--nx-neg)"></i>Gastos</div><div class="v nx-num">'+fmt(gas)+'</div></div>'+
+    '<div class="nx-stat"><div class="k"><i style="background:var(--nx-neg)"></i>Gastos</div><div class="v nx-num">'+fmt(gas)+'</div>'+
+     (gasEst>0.5?'<div class="k" style="margin-top:2px">+ '+fmt(gasEst)+' estimado</div>':'')+'</div>'+
     '<div class="nx-stat"><div class="k"><i style="background:var(--nx-brand)"></i>Metas</div><div class="v nx-num">'+fmt(metaYa)+'</div></div>'+
    '</div>'+
 
@@ -559,7 +609,7 @@
      const a=av[0], mas=av.length-1;
      return '<div class="nx-alert solo '+a.n+'"><span class="i">'+a.i+'</span>'+
       '<span><b>'+a.t+'</b><span>'+a.s+'</span>'+
-      '<span class="ax">'+(a.a?'<a data-go="'+a.a.k+'">'+a.a.r+'</a>':'')+
+      '<span class="ax">'+(a.a?'<a data-go="'+a.a.k+'"'+(a.a.id?' data-id="'+a.a.id+'"':'')+'>'+a.a.r+'</a>':'')+
       (mas>0?'<a data-go="notifs" class="mas">+'+mas+' aviso'+(mas===1?'':'s')+' \u203a</a>':'')+
       '</span></span></div>';
    })()+
@@ -635,7 +685,19 @@
     kv('Medio',h(medio))+
     (t.cuotas>1?kv('Cuotas',t.cuotas):'')+
     (t.payCardId||t.payLoanId?kv('Tipo','Pago de deuda'):'')+
+    (+t.montoUsd>0?kv('En dólares','US$ '+(+t.montoUsd).toFixed(2))+
+      kv('Tipo de cambio aplicado','S/ '+(+t.tc||0).toFixed(4))+
+      kv('De dónde sale el monto', t.fuenteMonto==='banco'?'del banco'
+        : t.fuenteMonto==='manual'?'lo corregiste tú':'estimado por la app'):'')+
    '</div>'+
+   (t.porConciliar
+    ? '<div class="nx-tip nxw"><span>≈</span><span>Este monto es un <b>estimado</b>: el correo '+
+      'vino en dólares y no traía tipo de cambio. Cuando veas el cargo real en tu estado de '+
+      'cuenta, escríbelo acá y queda exacto.</span></div>'+
+      '<div class="nx-fld"><span class="k">Monto real en soles</span>'+
+       '<input id="nxConc" inputmode="decimal" placeholder="'+fmt2(t.monto).replace('S/ ','')+'"></div>'+
+      '<button class="nx-go" id="nxConcOk" style="margin-top:10px">Guardar el monto real</button>'
+    : '')+
    (t.tipo!=='Ingreso'
     ? '<button class="nx-go sec" id="nxDev" style="margin-top:10px">Me devolvieron esta compra</button>'
     : '')+
@@ -643,6 +705,30 @@
     '>Eliminar movimiento</button>'+
    '</div>';
  },wire(p){
+  const ci=$('nxConcOk');
+  if(ci) ci.onclick=()=>{
+   const t=(S.tx||[]).find(x=>x.id===p.id); if(!t) return;
+   const v=montoDeTexto(($('nxConc')||{}).value);
+   if(!(v>0)){ toast('No entendí ese monto','Escríbelo como 83.91 o 83,91',null); return; }
+   const antes=JSON.stringify(S);
+   const usd=+t.montoUsd||0, tc=v/(usd||1);
+   vib(8);
+   confirmar({titulo:'¿Guardar el monto real?',boton:'Sí, es este',
+     detalle:'<div>US$ '+usd.toFixed(2)+' quedó en <b>'+fmt2(v)+'</b> (S/ '+tc.toFixed(2)+
+      ' por dólar). Deja de ser un estimado y esa tasa se usa para los próximos.</div>'+
+      (tcDesviado(tc,t)?'<div style="color:var(--nx-warn);margin-top:6px">Ojo: se sale más de '+
+        Math.round(TC_DESVIO*100)+' % de tu mediana (S/ '+tcDesviado(tc,t).toFixed(2)+
+        ' por dólar). Revisa que sea el cargo correcto.</div>':'')+
+      lineaCambio('Este movimiento',+t.monto||0,v)},()=>{
+    const err=conciliarUsd(p.id, v);
+    if(err){ toast('No pude guardarlo',err,null); return; }
+    vib(16);
+    toast('Monto real guardado',fmt2(v),
+      ()=>{ revertir(antes); toast('Se deshizo','',null); });
+    pinta(0);
+   });
+  };
+
   /* Devolución / extorno: la plata vuelve, pero el gasto ya está anotado. Se
      registra la entrada con la MISMA categoría, así el mes queda neto y no se
      pierde el rastro de la compra original. */
@@ -676,7 +762,7 @@
     const ult=(S.tx||[]).slice().sort((x,y)=>y.id-x.id)[0];
     if(ult&&ult.tipo==='Ingreso'){ ult.catId=t.catId; ult.devDe=t.id; try{ save(); }catch(e){} }
     toast('Devolución anotada',fmt(t.monto)+' de vuelta',
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Se deshizo','',null); });
+      ()=>{ revertir(antes); toast('Se deshizo','',null); });
     volver();
    });
   };
@@ -699,7 +785,7 @@
     vib(18);
     crudo('delMov',p.id);                              // ← motor
     toast('Movimiento borrado',h(t.concepto||''),
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Borrado deshecho','',null); });
+      ()=>{ revertir(antes); toast('Borrado deshecho','',null); });
     volver();
    });
   };
@@ -777,7 +863,8 @@
    const ops=(S.cuentas||[]).map(a=>({v:'a:'+a.id,n:a.nombre,s:'saldo '+fmt(saldoCuenta(a.id)),
       e:/yape|plin/i.test(a.nombre)?'📲':/efectivo/i.test(a.nombre)?'💵':/d[eé]bito/i.test(a.nombre)?'💳':'🏦'}))
     .concat((S.tarjetas||[]).map(c=>({v:'card:'+c.id,n:c.nombre+' (crédito)',
-      s:'disponible '+fmt(Math.max(0,(+c.linea||0)-consumidoCard(c))),e:'💳'})));
+      s:'disponible '+fmt(Math.max(0,(+c.linea||0)-consumidoCardExacto(c)))+
+        (estimadoCard(c)>0.5?' · '+fmt(estimadoCard(c))+' estimado':''),e:'💳'})));
    hoja('¿Con qué pagaste?',ops,reg.cuentaVal,v=>{ reg.cuentaVal=v; pinta(0); });
   };
   document.querySelectorAll('#nx-body .nx-cat.mas').forEach(cg=>cg.onclick=()=>{
@@ -953,8 +1040,9 @@
   const m=mesSel();
   return barraTop('Tarjetas',(S.tarjetas||[]).length+' activa'+((S.tarjetas||[]).length===1?'':'s'))+
    '<div class="nx-scroll">'+((S.tarjetas||[]).length?(S.tarjetas||[]).map(c=>{
-    const li=+c.linea||0, us=consumidoCard(c), st=cardMonthStatus(c,m.y,m.mn);
-    const p=li>0?Math.min(100,us/li*100):0;
+    const li=+c.linea||0, us=consumidoCardExacto(c), st=cardMonthStatus(c,m.y,m.mn);
+    const ce=estimadoCard(c);
+    const p=li>0?Math.min(100,(us+ce)/li*100):0;
     return '<button class="nx-box nxp" style="display:block;width:100%;text-align:left" data-go="tarjeta" data-id="'+c.id+'">'+
      '<div style="display:flex;justify-content:space-between;gap:10px"><b style="font-size:14.5px">'+h(c.nombre)+'</b>'+
       '<span style="color:var(--nx-faint)">›</span></div>'+
@@ -971,7 +1059,11 @@
  P.tarjeta={html(p){
   const c=(S.tarjetas||[]).find(x=>x.id===p.id);
   if(!c) return barraTop('Tarjeta')+'<div class="nx-scroll"><div class="nx-empty">No existe.</div></div>';
-  const m=mesSel(), li=+c.linea||0, us=consumidoCard(c), st=cardMonthStatus(c,m.y,m.mn);
+  const m=mesSel(), li=+c.linea||0, us=consumidoCardExacto(c), st=cardMonthStatus(c,m.y,m.mn);
+  /* Lo utilizado y el disponible son EXACTOS: los montos estimados (dólares sin
+     conversión del banco) no entran ahí. Van en su propia fila, al lado, para
+     que el cupo no se lea como más grande de lo que es. */
+  const ce=estimadoCard(c);
   const compras=comprasState(c).filter(x=>x.pend>0.5);
   const movs=(S.tx||[]).filter(t=>t.cardId===c.id||t.payCardId===c.id)
     .slice().sort((a,b)=>b.fecha.localeCompare(a.fecha)).slice(0,8);
@@ -983,6 +1075,9 @@
     '<div class="two"><div><span>Usado</span><b>'+fmt(us)+'</b></div>'+
      '<div><span>Cuota del mes</span><b>'+fmt(st.cuota)+'</b></div>'+
      '<div><span>Vence</span><b>día '+(c.dia||'—')+'</b></div></div>'+
+    (ce>0.5?'<div class="pie" style="color:var(--nx-warn)">Aparte: '+fmt2(ce)+
+      ' pendiente estimado (dólares sin el cargo real del banco). '+
+      'No está en el usado ni en el disponible.</div>':'')+
     '<div class="pie">Línea total '+fmt(li)+'</div></div>'+
 
    '<div class="nx-box">'+
@@ -998,13 +1093,15 @@
    '</div>'+
 
    '<div class="nx-st"><h3>Compras en cuotas</h3></div>'+
-   '<div class="nx-box">'+(compras.length?compras.map(x=>{
-     const q=x.p, n=Math.max(1,+q.n||1), cu=cuotaOf(q);
+   '<div class="nx-box">'+(compras.length?(function(){ const est=comprasEstimadas(c);
+    return compras.map(x=>{
+     const q=x.p, n=Math.max(1,+q.n||1), cu=cuotaOf(q), ap=!!est[x.id];
      const pagadas=Math.max(0,Math.min(n,Math.round((((+q.saldo||0)-x.pend)/((+q.saldo||0)||1))*n)));
      return '<div class="nx-row"><span class="av">'+emo(q.desc||'')+'</span>'+
-      '<span class="tx"><b>'+h(q.desc||'Compra')+'</b><span>'+pagadas+' de '+n+' cuotas · '+fmt(cu)+'/mes</span></span>'+
-      '<span class="am"><b>'+fmt(x.pend)+'</b><span>pendiente</span></span></div>';
-    }).join(''):'<div class="nx-empty">Sin compras en cuotas pendientes.</div>')+'</div>'+
+      '<span class="tx"><b>'+h(q.desc||'Compra')+(ap?' · estimada':'')+'</b><span>'+
+        pagadas+' de '+n+' cuotas · '+fmt(cu)+'/mes'+(ap?' (aprox.)':'')+'</span></span>'+
+      '<span class="am"><b>'+fmt(x.pend)+(ap?' aprox.':'')+'</b><span>pendiente</span></span></div>';
+    }).join(''); })():'<div class="nx-empty">Sin compras en cuotas pendientes.</div>')+'</div>'+
 
    '<div class="nx-st"><h3>Últimos movimientos de la tarjeta</h3></div>'+
    '<div class="nx-box">'+(movs.length?movs.map(filaTx).join(''):'<div class="nx-empty">Sin movimientos.</div>')+'</div>'+
@@ -1026,7 +1123,7 @@
     toast(+v ? nombreCierre(+v)+' guardado' : 'Cierre sin configurar',
       CRONO[(+v)+':'+y] ? 'Las fechas de pago ahora salen del cronograma del banco'
                         : 'Las fechas vuelven a ser estimadas',
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+      ()=>{ revertir(antes); toast('Cambio deshecho','',null); });
     pinta(0);
    });
   };
@@ -1069,7 +1166,7 @@
    '<div class="nx-st" style="margin-top:22px"><h3>Tarjetas de crédito</h3>'+
      '<span style="font-size:12px;color:var(--nx-mut)">'+trj.length+'</span></div>'+
    '<div class="nx-box">'+(trj.length?trj.map(c=>{
-     const us=consumidoCard(c), li=+c.linea||0;
+     const us=consumidoCardExacto(c), li=+c.linea||0;
      const fp=fechaPagoCiclo(c,m.y,m.mn);
      return '<button class="nx-row" data-trj="'+c.id+'"><span class="av">💳</span>'+
       '<span class="tx"><b>'+h(c.nombre)+'</b><span>usa '+fmt(us)+' de '+fmt(li)+
@@ -1132,7 +1229,7 @@
    else { S.cuentas=S.cuentas||[]; S.cuentas.push({id:newId(),nombre:nom}); }
    vib(16); save();
    toast(p.id?'Cuenta guardada':'Cuenta creada',nom,
-     ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+     ()=>{ revertir(antes); toast('Cambio deshecho','',null); });
    volver();
   };
   const d=$('nxCtD');
@@ -1153,7 +1250,7 @@
      vib(18);
      crudo('delCuenta',a.id);            // ← motor
      toast('Cuenta borrada',n?n+' registro'+(n===1?'':'s')+' quedaron en '+destino.nombre:'',
-       ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Borrado deshecho','',null); });
+       ()=>{ revertir(antes); toast('Borrado deshecho','',null); });
      volver();
     });
    };
@@ -1228,7 +1325,7 @@
            if(trjEd.last) cc.last=trjEd.last; else delete cc.last; }
    vib(16); save();
    toast('Tarjeta guardada',nom,
-     ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+     ()=>{ revertir(antes); toast('Cambio deshecho','',null); });
    volver();
   };
   $('nxTD2').onclick=()=>{
@@ -1243,7 +1340,7 @@
     vib(18);
     crudo('delCard',c.id);               // ← motor
     toast('Tarjeta borrada',h(c.nombre),
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Borrado deshecho','',null); });
+      ()=>{ revertir(antes); toast('Borrado deshecho','',null); });
     volver();
    });
   };
@@ -1335,7 +1432,7 @@
      vib(18);
      anotarRapido({tipo:'Gasto',monto:+f.monto||0,catId:f.catId,cuentaVal:'a:'+f.cuentaId,desc:f.concepto});
      toast('Anotado',h(f.concepto)+' · '+fmt(f.monto),
-       ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Movimiento deshecho','',null); });
+       ()=>{ revertir(antes); toast('Movimiento deshecho','',null); });
      pinta(0);
     });
    });
@@ -1416,7 +1513,7 @@
     r.concepto=nom; r.catId=recEd.catId; r.monto=mo; r.dia=recEd.dia; r.cuentaId=recEd.cuentaId;
     vib(16); save();
     toast('Cargo fijo guardado',nom+' · '+fmt(mo),
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+      ()=>{ revertir(antes); toast('Cambio deshecho','',null); });
    }else{
     const now=new Date(), mk=now.getFullYear()+'-'+pad2(now.getMonth()+1);
     const pasado=recEd.dia<=now.getDate();
@@ -1427,7 +1524,7 @@
     generateRecurrentes();                             // ← motor: anota lo que ya venció
     save();
     toast('Cargo fijo creado',nom+' · '+fmt(mo)+' el día '+recEd.dia,
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Creación deshecha','',null); });
+      ()=>{ revertir(antes); toast('Creación deshecha','',null); });
    }
    volver();
   };
@@ -1443,7 +1540,7 @@
     vib(18);
     crudo('delRec',r.id);                // ← motor
     toast('Cargo fijo borrado',h(r.concepto),
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Borrado deshecho','',null); });
+      ()=>{ revertir(antes); toast('Borrado deshecho','',null); });
     volver();
    });
   };
@@ -1492,7 +1589,7 @@
     S.favoritos.push({id:newId(),concepto:nom,catId:favEd.catId,monto:mo,cuentaId:favEd.cuentaId}); }
    vib(16); save();
    toast(p.id?'Favorito guardado':'Favorito creado',nom+' · '+fmt(mo),
-     ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+     ()=>{ revertir(antes); toast('Cambio deshecho','',null); });
    volver();
   };
   const d=$('nxFDel');
@@ -1506,7 +1603,7 @@
     vib(18);
     crudo('delFav',f.id);                // ← motor
     toast('Favorito borrado',h(f.concepto),
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Borrado deshecho','',null); });
+      ()=>{ revertir(antes); toast('Borrado deshecho','',null); });
     volver();
    });
   };
@@ -1818,7 +1915,7 @@
 
  /* ------------------------------ Finanzas ------------------------------ */
  P.fin={html(){
-  const tarj=(S.tarjetas||[]).reduce((a,c)=>a+consumidoCard(c),0);
+  const tarj=(S.tarjetas||[]).reduce((a,c)=>a+consumidoCardExacto(c),0);
   const loan=(S.loans||[]).reduce((a,l)=>a+loanRem(l),0);
   const ya=(S.metas||[]).reduce((a,g)=>a+(+g.ahorrado||0),0);
   const pend=vencs().filter(v=>v.falta>0.5).length;
@@ -1828,8 +1925,9 @@
   return '<div class="nx-top"><div class="tt"><h2>Finanzas</h2><span>Todo lo que debes, ahorras y pagas</span></div></div>'+
    '<div class="nx-scroll">'+
    '<div class="nx-cyc"><div class="h"><span>Deuda total</span></div>'+
-    '<div class="big">'+fmt2(deudaTotal())+'</div>'+
-    '<div class="pie">'+(S.loans||[]).length+' préstamos · '+(S.tarjetas||[]).length+' tarjetas</div></div>'+
+    '<div class="big">'+fmt2(deudaTotalExacta())+'</div>'+
+    '<div class="pie">'+(S.loans||[]).length+' préstamos · '+(S.tarjetas||[]).length+' tarjetas'+
+     (deudaEstimada()>0.5?' · '+fmt2(deudaEstimada())+' estimado aparte':'')+'</div></div>'+
    '<div class="nx-box">'+
     fila('tarjetas','💳','Tarjetas',(S.tarjetas||[]).length+' activas',fmt(tarj))+
     fila('cuentas','🏦','Cuentas',(S.cuentas||[]).length+' medios de pago',
@@ -1876,7 +1974,7 @@
   return barraTop('Avisos',av.length+' aviso'+(av.length===1?'':'s'))+
    '<div class="nx-scroll">'+av.map(a=>'<div class="nx-alert '+a.n+'" style="flex:1 1 auto;margin-bottom:10px">'+
     '<span class="i">'+a.i+'</span><span><b>'+a.t+'</b><span>'+a.s+'</span>'+
-    (a.a?'<a data-go="'+a.a.k+'">'+a.a.r+'</a>':'')+'</span></div>').join('')+
+    (a.a?'<a data-go="'+a.a.k+'"'+(a.a.id?' data-id="'+a.a.id+'"':'')+'>'+a.a.r+'</a>':'')+'</span></div>').join('')+
    '<div class="nx-tip"><span>ℹ️</span><span>Estos avisos se calculan cuando abres la app. Para que te '+
     'lleguen al celular sin abrirla haría falta un servidor de notificaciones; hoy la app no tiene uno.</span></div>'+
    '</div>';
@@ -2085,7 +2183,7 @@
     const desde=S.categorias.indexOf(c), hasta=Math.max(0,Math.min(S.categorias.length-1,ced.pos-1));
     if(desde>=0 && desde!==hasta){ S.categorias.splice(desde,1); S.categorias.splice(hasta,0,c); }
     vib(16); save();
-    toast('Categoría guardada',nom,()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+    toast('Categoría guardada',nom,()=>{ revertir(antes); toast('Cambio deshecho','',null); });
    } else {
     const nueva={id:newId(),nombre:nom,bucket:ced.bucket,limite:lim,sugerencias:[]};
     if(ced.icono) nueva.icono=ced.icono;
@@ -2093,7 +2191,7 @@
     vib(16); save();
     if(ced.vuelve) reg.catId=nueva.id;          // si vino del registro, queda elegida
     toast('Categoría creada',nom+' · '+ced.bucket,
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Se deshizo la creación','',null); });
+      ()=>{ revertir(antes); toast('Se deshizo la creación','',null); });
    }
    volver();
   };
@@ -2119,7 +2217,7 @@
      S.categorias=S.categorias.filter(x=>x.id!==c.id);
      vib(18); save();
      toast('Categoría borrada', n?n+' registro'+(n===1?'':'s')+' quedaron en '+destino.nombre.split(' (')[0]:'',
-       ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Borrado deshecho','',null); });
+       ()=>{ revertir(antes); toast('Borrado deshecho','',null); });
      volver();
     });
    };
@@ -2317,7 +2415,7 @@
    if(c.on && !c.desde) c.desde=keyOf(new Date());
    vib(16); save();
    toast('Sueldo guardado',fmt2(c.q1)+' el 15 y '+fmt2(c.q2)+' a fin de mes',
-     ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+     ()=>{ revertir(antes); toast('Cambio deshecho','',null); });
    pinta(0);
   };
   const ah=$('nxSuAhora');
@@ -2330,7 +2428,7 @@
     const antes=JSON.stringify(S);
     const hechos=generarSueldo(); renderAll(); pinta(0);
     toast('Sueldo anotado',hechos.length+' ingreso'+(hechos.length===1?'':'s')+' de '+fmt2(suma),
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Se deshizo','',null); });
+      ()=>{ revertir(antes); toast('Se deshizo','',null); });
    });
   };
   const cu=$('nxSuCuadrar');
@@ -2347,7 +2445,7 @@
       lineaCambio('Ingreso del mes',iA,boleta+(+S.cfg.otrosIngresos||0))},()=>{
     S.cfg.otros=otrosNuevo; vib(16); save();
     toast('Neto cuadrado','Ahora la app usa '+fmt2(boleta)+' de sueldo',
-      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+      ()=>{ revertir(antes); toast('Cambio deshecho','',null); });
     pinta(0);
    });
   };
@@ -2369,7 +2467,8 @@
    (fresco?'&fresco=1':'')+'&t='+Date.now();
  };
  /* estado en memoria de la pantalla */
- let bnd={fase:'nada', items:[], error:'', dias:14, puedeArchivar:false};
+ let bnd={fase:'nada', items:[], raros:[], error:'', dias:14,
+  puedeArchivar:false, puedeDesarchivar:false};
 
  const bndVistos=()=>{ S.cfg.correosVistos=S.cfg.correosVistos||[]; return S.cfg.correosVistos; };
  const bndCache=()=>{ S.cfg.correosCache=S.cfg.correosCache||{ts:0,n:0}; return S.cfg.correosCache; };
@@ -2407,10 +2506,17 @@
       que llega por POST, así que un aviso de archivado en un script sin el
       enganche le sobreescribiría la copia de la nube. */
    bnd.puedeArchivar=(d.archivar===true);
+   /* Y si sabe DESarchivar: sin eso, Deshacer no puede devolver el correo a la
+      bandeja, y entonces no se le promete un Deshacer completo. */
+   bnd.puedeDesarchivar=(d.desarchivar===true);
    const ya=bndVistos();
-   bnd.items=(d.bandeja||[]).filter(m=>m && m.id && ya.indexOf(m.id)<0);
+   const todo=(d.bandeja||[]).filter(m=>m && m.id && ya.indexOf(m.id)<0);
+   /* los que el lector no supo interpretar van aparte: se avisan, pero no se
+      pueden anotar (no hay monto que anotar) */
+   bnd.items=todo.filter(m=>!m.noLeido);
+   bnd.raros=todo.filter(m=>m.noLeido);
    bnd.fase='listo'; bnd.leido=Date.now(); bnd.fresco=!!fresco;
-   const c=bndCache(); c.ts=Date.now(); c.n=bnd.items.length;
+   const c=bndCache(); c.ts=Date.now(); c.n=bnd.items.length; c.raros=bnd.raros.length;
    try{ persist(); }catch(e){}
   }).catch(e=>{
    clearTimeout(tope);
@@ -2474,27 +2580,176 @@
   return o?o.id:((S.categorias||[])[0]||{}).id;
  }
 
- /* ---- consumos en dólares ----
+ /* ============================ dólares ============================
     El correo de un consumo en dólares NO trae tipo de cambio: el banco lo cobra
     después, a su tasa. Antes eso se descartaba en silencio (así se perdió un
-    consumo de OPENAI). Ahora se propone el monto en soles con el último tipo de
-    cambio conocido, él lo ajusta si quiere, y de su ajuste se aprende la tasa. */
- const TC_POR_DEFECTO=3.43;
- const tcUsd=()=>+((S.cfg||{}).tcUsd)||TC_POR_DEFECTO;
- function aprenderTc(usd,soles){
-  if(!(usd>0)||!(soles>0)) return;
+    consumo de OPENAI). Ahora se estima, se puede corregir a mano, y el
+    movimiento guarda de dónde salió la cifra.
+
+    Reglas duras de este bloque:
+    - una cifra estimada nunca se presenta después como exacta;
+    - la tasa se aprende SOLO al confirmar y guardar (nunca al escribir, ni en
+      una simulación, ni al cancelar);
+    - se guarda un historial corto y se usa la MEDIANA por medio de pago, así un
+      tipeo malo no arrastra todas las estimaciones siguientes. */
+ const TC_POR_DEFECTO=3.43, TC_MIN=2.5, TC_MAX=5, TC_HIST_MAX=12;
+ /* Cuántas conversiones confirmadas del MISMO banco y medio hacen falta antes de
+    fiarse de su mediana. Con menos, 3.43 es solo una referencia visual: el monto
+    queda estimado y pendiente de conciliar, nunca presentado como exacto. */
+ const TC_MUESTRAS_MIN=3, TC_DESVIO=0.15, TC_HIST_TOPE=120;
+
+ /** Lee un monto escrito a la peruana sin adivinar nunca.
+       "83,91" y "83.91"  -> 83.91          (antes "83,91" daba 8391)
+       "1.500,50" y "1,500.50" -> 1500.50
+       "1.500"            -> 1500
+     Devuelve NaN si hay texto raro, signo, separadores ambiguos ("1.500.50"),
+     un separador al final ("84,") o grupos de miles que no son de tres. */
+ function montoDeTexto(t){
+  let s=String(t==null?'':t).trim();
+  if(!s) return NaN;
+  s=s.replace(/^(?:S\/\.?|US\$|\$)\s*/i,'').trim();   // solo el símbolo, al inicio
+  if(!s) return NaN;
+  if(/\s/.test(s)) return NaN;      // "84 20" es ambiguo: puede ser 8420 u 84.20
+  if(/^[+-]/.test(s)) return NaN;                  // un monto negativo no se registra acá
+  if(!/^[\d.,]+$/.test(s)) return NaN;             // cualquier otra cosa es texto
+  if(/[.,]{2,}/.test(s)) return NaN;               // "1,,5" / "1.,5"
+  if(/[.,]$/.test(s)) return NaN;                  // "84," no se sabe qué es
+  const partes=s.split(/[.,]/);
+  if(partes[0]==='') return NaN;                   // ",50"
+  if(partes.length===1) return /^\d+$/.test(partes[0])?+partes[0]:NaN;
+  const seps=s.replace(/\d/g,'');                  // p.ej. "." o ",."
+  const cola=partes[partes.length-1];
+  const decimal=(cola.length===1||cola.length===2);
+  if(seps.length>1){
+   const miles=decimal?seps.slice(0,-1):seps;
+   if(!/^(.)\1*$/.test(miles)) return NaN;                       // miles mezclados
+   if(decimal && miles.indexOf(seps.slice(-1))>=0) return NaN;   // "1.500.50" es ambiguo
+  }
+  const grupos=decimal?partes.slice(1,-1):partes.slice(1);
+  if(grupos.some(g=>g.length!==3)) return NaN;      // separadores que no cuadran
+  if(grupos.length && partes[0].length>3) return NaN;
+  const entero=(decimal?partes.slice(0,-1):partes).join('');
+  if(!/^\d+$/.test(entero)) return NaN;
+  const v=+(entero+(decimal?'.'+cola:''));
+  return isFinite(v)?v:NaN;
+ }
+
+ const tcHist=()=>{ S.cfg.tcHist=Array.isArray(S.cfg.tcHist)?S.cfg.tcHist:[]; return S.cfg.tcHist; };
+ const mediana=a=>{ if(!a.length) return 0; const b=a.slice().sort((x,y)=>x-y), i=b.length>>1;
+   return b.length%2?b[i]:(b[i-1]+b[i])/2; };
+ const tcPlausible=t=>t>=TC_MIN && t<=TC_MAX;
+ /* La identidad de una tasa es SIEMPRE el par banco+medio tal como los nombra el
+    lector de correos ('BCP' + 'credito-bcp'). Antes la conciliación guardaba
+    'credito' a secas: la mediana se partía en dos y ninguna juntaba muestras. */
+ const idTc=o=>({medio:(o&&o.medio)||'', banco:(o&&o.banco)||''});
+ const mismaTc=(x,id)=>(x.medio||'')===id.medio && (x.banco||'')===id.banco;
+
+ /** Qué tasa usar y con cuánto respaldo. `firme` solo con TC_MUESTRAS_MIN
+     conversiones confirmadas del mismo banco y medio. */
+ function tcInfo(o){
+  const id=idTc(o);
+  const m=tcHist().filter(x=>mismaTc(x,id)).map(x=>+x.tc).filter(tcPlausible);
+  if(m.length>=TC_MUESTRAS_MIN)
+   return {tc:Math.round(mediana(m)*10000)/10000, n:m.length, firme:true};
+  return {tc:+((S.cfg||{}).tcUsd)||TC_POR_DEFECTO, n:m.length, firme:false};
+ }
+ const tcUsd=o=>tcInfo(o).tc;
+ /** Si ya hay mediana firme, ¿esta tasa se sale más de 15 %? Devuelve la mediana. */
+ function tcDesviado(tc,o){
+  const i=tcInfo(o);
+  return (i.firme && i.tc>0 && Math.abs(tc-i.tc)/i.tc>TC_DESVIO) ? i.tc : 0;
+ }
+
+ /** Guarda una conversión CONFIRMADA. Se llama después de anotar, nunca antes. */
+ function aprenderTc(m, soles){
+  const usd=+m.montoUsd||0;
+  if(!(usd>0)||!(soles>0)) return null;
   const t=soles/usd;
-  if(t>2 && t<6){ S.cfg.tcUsd=Math.round(t*10000)/10000; try{ persist(); }catch(e){} }
+  if(!tcPlausible(t)) return null;
+  const h=tcHist();
+  const reg={tc:Math.round(t*10000)/10000, usd:usd, soles:soles, medio:m.medio||'',
+    banco:m.banco||'', fecha:keyOf(new Date()), correoK:m.id};
+  h.push(reg);
+  /* El recorte es POR GRUPO. Si se recortara el historial completo, doce
+     conversiones de una tarjeta borrarían todas las referencias de la otra y esa
+     otra volvería a quedarse sin mediana. */
+  const id=idTc(reg), mismos=h.filter(x=>mismaTc(x,id));
+  if(mismos.length>TC_HIST_MAX){
+   const sobran=mismos.slice(0,mismos.length-TC_HIST_MAX);
+   S.cfg.tcHist=h.filter(x=>sobran.indexOf(x)<0);
+  }
+  /* tope global de seguridad, muy por encima de lo que él usa */
+  const hh=tcHist();
+  if(hh.length>TC_HIST_TOPE) S.cfg.tcHist=hh.slice(-TC_HIST_TOPE);
+  return reg;
+ }
+ /** La clave con la que se aprendió: así Deshacer sabe qué olvidar. */
+ const claveTc=t=>(t&&t.correoK)||('tx-'+(t&&t.id));
+ /** Deshacer: quita lo aprendido por ESA operación. */
+ function olvidarTc(correoK){
+  if(!correoK) return;
+  S.cfg.tcHist=tcHist().filter(x=>x.correoK!==correoK);
+ }
+
+ /** Cambia un estimado por el monto real, cuando llega el cargo del banco.
+     Pasa por editMov()+addMov() del motor: acá no se recalcula nada. */
+ function conciliarUsd(id, soles){
+  const t=(S.tx||[]).find(x=>x.id===id); if(!t) return 'no existe';
+  const usd=+t.montoUsd||0;
+  if(!(usd>0)) return 'ese movimiento no vino en dólares';
+  if(!(soles>0)) return 'no entendí el monto';
+  const tc=soles/usd;
+  if(!tcPlausible(tc)) return 'US$ '+usd.toFixed(2)+' por '+fmt2(soles)+' sería S/ '+tc.toFixed(2)+' por dólar';
+  /* identidad de la tasa: la del correo original, no una inventada acá */
+  const id2=idTc(t), clave=claveTc(t), medio=t.medio||'', banco=t.banco||'';
+  editMov(id);                                  // ← motor (deja cuotas y TEA como estaban)
+  $('mMonto').value=String(soles);
+  addMov();                                     // ← motor
+  const u=(S.tx||[]).find(x=>x.id===id);
+  if(u){ u.moneda='USD'; u.montoUsd=usd; u.tc=Math.round(tc*10000)/10000;
+         u.fuenteMonto='manual'; delete u.porConciliar;
+         u.correoK=t.correoK; u.medio=medio; u.banco=banco; }
+  aprenderTc({montoUsd:usd, medio:medio, banco:banco, id:clave}, soles);
+  save();
+  return '';
+ }
+ /** movimientos en dólares que todavía son un estimado */
+ const porConciliar=()=>(S.tx||[]).filter(t=>t.porConciliar && +t.montoUsd>0);
+
+ /* Cuando el banco manda DESPUÉS el cargo real de un consumo en dólares, ese
+    correo no es un gasto nuevo: es la conversión del que ya está anotado como
+    estimado. Antes se anotaba dos veces. Ahora se propone enlazarlo, y él
+    confirma: la app no corrige plata en silencio. */
+ let bndNoConc={};      // «es otro gasto»: él ya dijo que no era conciliación
+ function pendienteDe(m){
+  if(!m || bndNoConc[m.id]) return null;
+  if(!(+m.monto>0) || !(+m.montoUsd>0)) return null;
+  const usd=+m.montoUsd;
+  const cand=porConciliar().filter(t=>Math.abs((+t.montoUsd||0)-usd)<0.01);
+  if(!cand.length) return null;
+  /* el caso seguro: el mismo identificador del banco */
+  const mismo=cand.find(t=>t.correoK && t.correoK===m.id);
+  if(mismo) return mismo;
+  const dias=t=>Math.abs(new Date(t.fecha+'T00:00')-new Date(m.fecha+'T00:00'))/86400000;
+  return cand.filter(t=>(t.banco||'')===(m.banco||'') && dias(t)<=7)
+             .sort((a,b)=>dias(a)-dias(b))[0] || null;
+ }
+
+ /** De dónde sale la cifra en soles: del banco, de su corrección, o estimada. */
+ function fuenteMonto(m){
+  if(+((bndEleccion[m.id]||{}).monto)>0) return 'manual';
+  if(+m.monto>0) return 'banco';
+  return +m.montoUsd>0 ? 'estimado' : 'banco';
  }
  /** lo que se va a anotar de verdad: su ajuste, el monto del correo, o el estimado */
  function montoCorreo(m){
   const e=bndEleccion[m.id];
   if(e && +e.monto>0) return +e.monto;
   if(+m.monto>0) return +m.monto;
-  if(+m.montoUsd>0) return Math.round(+m.montoUsd*tcUsd()*100)/100;
+  if(+m.montoUsd>0) return Math.round(+m.montoUsd*tcUsd(m)*100)/100;
   return 0;
  }
- const esEstimado=m=>!(+m.monto>0) && +m.montoUsd>0 && !((bndEleccion[m.id]||{}).monto>0);
+ const esEstimado=m=>fuenteMonto(m)==='estimado';
 
  /** ¿Ya existe un movimiento del mismo día y monto? Sus datos tienen cosas
      tecleadas a mano, así que el correo puede ser el mismo gasto ya anotado. */
@@ -2540,10 +2795,24 @@
    if(typeof editId!=='undefined'&&editId) cancelEdit();
    addMov();                                           // ← motor
   }
-  /* la marca del correo va en el movimiento recién creado, para no repetirlo */
+  /* la marca del correo va en el movimiento recién creado, para no repetirlo, y
+     con ella los datos de la conversión: nunca se pierde de dónde salió la cifra */
   const ult=(S.tx||[]).slice().sort((a,b)=>b.id-a.id)[0];
-  if(ult) ult.correoK=m.id;
-  if(+m.montoUsd>0) aprenderTc(+m.montoUsd, montoCorreo(m));
+  if(ult){
+   ult.correoK=m.id;
+   if(+m.montoUsd>0){
+    const soles=montoCorreo(m), f=fuenteMonto(m);
+    ult.moneda='USD';
+    ult.montoUsd=+m.montoUsd;
+    ult.tc=Math.round((soles/(+m.montoUsd))*10000)/10000;
+    ult.fuenteMonto=f;                       // 'banco' | 'manual' | 'estimado'
+    /* banco y medio TAL COMO los nombra el lector: son la identidad de la tasa,
+       y la conciliación de mañana tiene que usar exactamente estos dos */
+    ult.medio=m.medio||'';
+    ult.banco=m.banco||'';
+    if(f==='estimado') ult.porConciliar=true;   // sigue siendo un estimado
+   }
+  }
  }
 
  /** avisa a la nube que ya se resolvió (y lo recuerda local por si falla) */
@@ -2558,6 +2827,19 @@
   if(!u) return;
   fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
     body:JSON.stringify({action:'archivar',ids:ids}),redirect:'follow'}).catch(()=>{});
+ }
+
+ /** Lo contrario: si él deshace, el correo tiene que volver a la bandeja.
+     Sin esto, deshacer dejaba la operación marcada como resuelta EN EL SERVIDOR
+     y no volvía a aparecer nunca: la operación se perdía. */
+ function desarchivarCorreos(ids){
+  if(!ids||!ids.length) return;
+  S.cfg.correosVistos=bndVistos().filter(x=>ids.indexOf(x)<0);
+  if(!bnd.puedeArchivar) return;
+  let u=''; try{ u=getSyncUrl()||''; }catch(e){}
+  if(!u) return;
+  fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'desarchivar',ids:ids}),redirect:'follow'}).catch(()=>{});
  }
 
  /** Marca varios como vistos: no anota nada y no vuelven a aparecer. */
@@ -2575,6 +2857,7 @@
   toast(ids.length===1?'Marcado como visto':ids.length+' marcados como vistos',
     'No se anotó ninguno',()=>{
      S.cfg.correosVistos=antesVistos;
+     desarchivarCorreos(ids);        // también en el servidor, o no vuelven nunca
      try{ persist(); }catch(e){}
      bnd.items=guardados.concat(bnd.items);
      bndCache().n=bnd.items.length;
@@ -2636,6 +2919,23 @@
       '<span class="fe">'+etiquetaFecha(m.fecha)+'</span></span>'+
      '</button>';
    }
+   /* ¿es la conversión real de algo que ya está anotado como estimado? */
+   const pend=pendienteDe(m);
+   if(pend){
+    const tc=(+m.monto)/(+m.montoUsd||1);
+    return '<div class="nx-mail conc" data-k="'+h(m.id)+'" data-conc="'+pend.id+'">'+
+     '<div class="ln"><span class="b">'+(ICO_BANCO[m.banco]||'🏦')+' '+h(m.banco)+
+       ' · conciliación</span><b class="mo">'+fmt2(+m.monto)+'</b></div>'+
+     '<div class="cp">'+h(m.concepto||'Movimiento')+'</div>'+
+     '<div class="fe">'+etiquetaFecha(m.fecha)+' · '+h(m.detalle||m.banco)+'</div>'+
+     '<div class="nt">Parece el <b>cargo real</b> de <b>'+h((pend.concepto||'').slice(0,26))+
+      '</b>, que anotaste estimado en '+fmt2(+pend.monto||0)+'. Los mismos <b>US$ '+
+      (+m.montoUsd).toFixed(2)+'</b>, ahora a S/ '+tc.toFixed(2)+' por dólar. '+
+      'Si lo enlazas, <b>no se crea otro gasto</b>: se corrige el que ya tienes.</div>'+
+     '<div class="bt"><button class="ok" data-conc-ok="'+h(m.id)+'">Enlazarlo</button>'+
+     '<button class="no" data-conc-no="'+h(m.id)+'">Es otro gasto</button></div>'+
+     '</div>';
+   }
    return '<div class="nx-mail" data-k="'+h(m.id)+'">'+
     '<div class="ln"><span class="b">'+(ICO_BANCO[m.banco]||'🏦')+' '+h(m.banco)+'</span>'+
      '<b class="mo">'+fmt2(montoCorreo(m))+(esEstimado(m)?' <span style="font-size:10px;font-weight:600;color:var(--nx-warn)">aprox.</span>':'')+'</b></div>'+
@@ -2668,8 +2968,18 @@
        '<button class="no" data-no="'+h(m.id)+'">Descartar</button></div>')+
     '</div>';
   };
+  /* Correos de un banco que el lector no supo interpretar: no se pueden anotar
+     (no hay monto), pero tampoco se tiran a la basura en silencio. */
+  const avisoRaros=(bnd.raros||[]).length
+   ? '<div class="nx-tip nxw"><span>❓</span><span>Hay <b>'+bnd.raros.length+' correo'+
+     (bnd.raros.length===1?'':'s')+'</b> de tu banco que no supe leer: '+
+     (bnd.raros||[]).slice(0,3).map(r=>'«'+h(r.concepto||'sin asunto')+'»').join(', ')+
+     '. Míralos en tu correo y, si eran una operación, anótala a mano.'+
+     '<br><button id="nxRaros" style="margin-top:8px">Ya los revisé, no avisar más</button>'+
+     '</span></div>'
+   : '';
   const n=bndSelN();
-  return cab+'<div class="nx-scroll'+(bndModo?' conbarra':'')+'">'+
+  return cab+'<div class="nx-scroll'+(bndModo?' conbarra':'')+'">'+avisoRaros+
    (bnd.items.length===0
     ? '<div class="nx-empty">Nada nuevo en tus correos de los últimos '+bnd.dias+' días.'+
       (bnd.leido?'<br><span style="font-size:11.5px">'+
@@ -2739,11 +3049,22 @@
   /* el monto en soles de un consumo en dólares: se puede corregir a mano */
   document.querySelectorAll('#nx-body [data-usd]').forEach(i=>{
    i.onclick=ev=>ev.stopPropagation();
-   i.oninput=()=>{ i.value=i.value.replace(/[^0-9.]/g,''); };
+   /* deja escribir coma: acá se escribe "84,20" y eso es S/ 84.20 */
+   i.oninput=()=>{ i.value=i.value.replace(/[^0-9.,]/g,''); };
    i.onchange=()=>{
     const m=bnd.items.find(x=>x.id===i.dataset.usd); if(!m) return;
-    const v=parseFloat(i.value)||0;
-    if(v>0){ eleccionDe(m).monto=v; aprenderTc(+m.montoUsd,v); }
+    const v=montoDeTexto(i.value);
+    if(!(v>0)){ toast('No entendí ese monto','Escríbelo como 83.91 o 83,91',null); pinta(0); return; }
+    const t=v/(+m.montoUsd||1);
+    if(!tcPlausible(t)){
+     toast('Ese monto no cuadra',
+       'US$ '+(+m.montoUsd||0).toFixed(2)+' por '+fmt2(v)+' sería S/ '+t.toFixed(2)+' por dólar',null);
+     pinta(0); return;
+    }
+    eleccionDe(m).monto=Math.round(v*100)/100;   // aprender: solo al confirmar
+    const med=tcDesviado(t,m);
+    if(med) toast('Revisa ese monto','S/ '+t.toFixed(2)+' por dólar se sale más de '+
+      Math.round(TC_DESVIO*100)+' % de tu mediana (S/ '+med.toFixed(2)+')',null);
     pinta(0);
    };
   });
@@ -2753,7 +3074,7 @@
    const e=eleccionDe(m); vib(8);
    const ops=[{v:'1',n:'Sin cuotas',e:'💳',s:'se paga en el próximo estado de cuenta'}]
     .concat([2,3,6,9,12,18,24].map(n=>({v:String(n),n:n+' cuotas',e:'🧾',
-      s:fmt(montoCorreo(m)/n)+' por mes'})));
+      s:fmt(montoCorreo(m)/n)+' por mes'+(esEstimado(m)?' (aprox.)':'')})));
    hoja('¿En cuántas cuotas la compraste?',ops,String(e.cuotas||1),
      v=>{ e.cuotas=+v||1; pinta(0); });
   });
@@ -2787,34 +3108,113 @@
    confirmar({titulo:'¿Anotar este movimiento?',boton:'Sí, anotar',
      detalle:'<div><b>'+h(m.concepto||'Movimiento')+'</b> · '+fmt2(montoCorreo(m))+' el '+fechaCorta(m.fecha)+
       '<br>'+(cat?'Categoría '+h(cat.nombre.split(' (')[0])+' · ':'')+h(dest)+
-      ((e.cuotas||1)>1?'<br>En <b>'+e.cuotas+' cuotas</b> de '+fmt((+m.monto||0)/e.cuotas):'')+
+      ((e.cuotas||1)>1?'<br>En <b>'+e.cuotas+' cuotas</b> de '+fmt2(montoCorreo(m)/e.cuotas)+
+        (esEstimado(m)?' <b>aprox.</b> — quedan aproximadas hasta que concilies el total':''):'')+
       (m.moneda==='USD'?'<br>El correo vino en <b>US$ '+(+m.montoUsd||0).toFixed(2)+
         '</b>'+(esEstimado(m)
           ? ' y no trae tipo de cambio. Se anota <b>'+fmt2(montoCorreo(m))+
-            '</b> usando S/ '+tcUsd().toFixed(2)+' por dólar: es un <b>estimado</b>, '+
-            'ajústalo cuando lo veas en tu estado de cuenta.'
+            '</b> usando S/ '+tcUsd(m).toFixed(2)+' por dólar'+
+            (tcInfo(m).firme?' (tu mediana de '+tcInfo(m).n+' conversiones)'
+                            :' (solo de referencia: aún no tengo '+TC_MUESTRAS_MIN+
+                             ' conversiones de este medio)')+
+            ': queda marcado como <b>estimado</b>, fuera de tus totales exactos, y te '+
+            'voy a recordar ajustarlo cuando llegue el cargo real.'
           : (+(bndEleccion[m.id]||{}).monto>0
              ? '; en soles va el monto que escribiste tú.'
              : '; se anota el total cobrado en soles.')):'')+'</div>'+
       (y?'<div style="color:var(--nx-warn);margin-top:6px">Ojo: ya tienes <b>'+
         h((y.concepto||'algo').slice(0,28))+'</b> por '+fmt2(y.monto)+' ese día. '+
         'Si es el mismo gasto, cancela y descártalo.</div>':'')+
-      lineaCambio('Deuda total',r.deudaA,r.deudaB)+
-      lineaCambio('Disponible del mes',r.cajaA,r.cajaB)},()=>{
+      lineaCambio(esEstimado(m)?'Deuda total (aprox.)':'Deuda total',r.deudaA,r.deudaB)+
+      lineaCambio(esEstimado(m)?'Disponible del mes (aprox.)':'Disponible del mes',
+        r.cajaA,r.cajaB)},()=>{
     const antes=JSON.stringify(S);
+    const soles=montoCorreo(m);
     vib(18);
     anotarCorreo(m);
+    /* la tasa se aprende ACÁ: después de anotar de verdad. Nunca al escribir el
+       monto, nunca en la simulación. Y si deshace, se olvida (abajo). */
+    if(+m.montoUsd>0 && fuenteMonto(m)!=='estimado') aprenderTc(m, soles);
     archivarCorreos([m.id]);
     bnd.items=bnd.items.filter(x=>x.id!==m.id);
     bndCache().n=bnd.items.length;
     save(); pinta(0);
-    toast('Movimiento anotado',h(m.concepto||'')+' '+fmt2(montoCorreo(m)),
-      ()=>{ S=JSON.parse(antes); persist(); renderAll();
-            bnd.items.unshift(m); pinta(0); toast('Se deshizo','',null); });
+    toast('Movimiento anotado',h(m.concepto||'')+' '+fmt2(soles),
+      /* Deshacer completo: quita el movimiento, olvida la tasa aprendida, sube la
+         reversión a la nube y le devuelve el correo a la bandeja (también en el
+         servidor, con desarchivar). */
+      ()=>{ revertir(antes,()=>{ olvidarTc(m.id); desarchivarCorreos([m.id]); });
+            bnd.items.unshift(m); bndCache().n=bnd.items.length; pinta(0);
+            /* si el script de la nube no sabe desarchivar, el correo vuelve solo
+               en esta pantalla: se dice, no se promete lo que no se puede. */
+            toast('Se deshizo', bnd.puedeDesarchivar ? ''
+              : 'El correo vuelve acá, pero tu script no sabe devolverlo: si recargas, tendrás que anotarlo a mano.',
+              null); });
    });
   });
+  /* --- los correos que no se supieron leer: dejar de avisar --- */
+  const br=$('nxRaros');
+  if(br) br.onclick=()=>{
+   const ids=(bnd.raros||[]).map(r=>r.id);
+   if(!ids.length) return;
+   const antes=JSON.stringify(S), guardados=(bnd.raros||[]).slice();
+   vib(10);
+   archivarCorreos(ids);
+   bnd.raros=[]; bndCache().raros=0;
+   try{ persist(); }catch(e){}
+   pinta(0);
+   toast('Listo','No vuelvo a avisar de esos correos',()=>{
+    revertir(antes,()=>{ desarchivarCorreos(ids); });
+    bnd.raros=guardados; bndCache().raros=guardados.length; pinta(0);
+    toast('Vuelven los avisos','',null);
+   });
+  };
+
+  /* --- ENLAZAR una conversión posterior con el pendiente que ya existe --- */
+  document.querySelectorAll('#nx-body [data-conc-ok]').forEach(b=>b.onclick=()=>{
+   const m=bnd.items.find(x=>x.id===b.dataset.concOk); if(!m) return;
+   const t=pendienteDe(m); if(!t) { pinta(0); return; }
+   const soles=+m.monto, usd=+m.montoUsd||0, tc=soles/(usd||1);
+   /* OJO con el orden: simular() restaura S desde una copia, así que `t` queda
+      apuntando al objeto viejo, YA mutado por la simulación. El monto de antes
+      se guarda ahora, o la confirmación mostraría el nuevo como si fuera el
+      anterior (un estimado presentado como exacto, justo lo que no debe pasar). */
+   const montoAntes=+t.monto||0;
+   vib(8);
+   const r=simular(()=>{ conciliarUsd(t.id, soles); });
+   confirmar({titulo:'¿Es el cargo real de ese consumo?',boton:'Sí, enlazarlo',
+     detalle:'<div><b>'+h((t.concepto||'').slice(0,30))+'</b> está anotado como '+
+      '<b>estimado</b> en '+fmt2(montoAntes)+'. El banco cobró <b>'+fmt2(soles)+
+      '</b> por los mismos US$ '+usd.toFixed(2)+' (S/ '+tc.toFixed(2)+' por dólar).'+
+      '<br>No se crea otro gasto: se corrige el que ya tienes y deja de ser estimado.</div>'+
+      (tcDesviado(tc,t)?'<div style="color:var(--nx-warn);margin-top:6px">Ojo: esa tasa se sale '+
+        'más de '+Math.round(TC_DESVIO*100)+' % de tu mediana (S/ '+tcDesviado(tc,t).toFixed(2)+
+        ').</div>':'')+
+      lineaCambio('Deuda total',r.deudaA,r.deudaB)+
+      lineaCambio('Este movimiento',montoAntes,soles)},()=>{
+    const antes=JSON.stringify(S);
+    const err=conciliarUsd(t.id, soles);
+    if(err){ toast('No pude enlazarlo',err,null); return; }
+    archivarCorreos([m.id]);
+    bnd.items=bnd.items.filter(x=>x.id!==m.id);
+    bndCache().n=bnd.items.length;
+    vib(16); pinta(0);
+    toast('Monto real guardado',fmt2(soles),()=>{
+     revertir(antes,()=>{ desarchivarCorreos([m.id]); });
+     bnd.items.unshift(m); bndCache().n=bnd.items.length; pinta(0);
+     toast('Se deshizo','vuelve a ser un estimado',null);
+    });
+   });
+  });
+  /* «Es otro gasto»: se deja de proponer y vuelve a ser un correo normal */
+  document.querySelectorAll('#nx-body [data-conc-no]').forEach(b=>b.onclick=()=>{
+   bndNoConc[b.dataset.concNo]=1; vib(8); pinta(0);
+   toast('Entendido','Lo trato como un gasto aparte',null);
+  });
+
   document.querySelectorAll('#nx-body [data-no]').forEach(b=>b.onclick=()=>{
    const m=bnd.items.find(x=>x.id===b.dataset.no); if(!m) return;
+   const antes=JSON.stringify(S);
    vib(10);
    archivarCorreos([m.id]);
    bnd.items=bnd.items.filter(x=>x.id!==m.id);
@@ -2822,9 +3222,9 @@
    try{ persist(); }catch(e){}
    pinta(0);
    toast('Descartado','No se anotó nada',()=>{
-    S.cfg.correosVistos=bndVistos().filter(x=>x!==m.id);
-    try{ persist(); }catch(e){}
-    bnd.items.unshift(m); pinta(0); toast('Vuelve a la bandeja','',null);
+    revertir(antes,()=>{ desarchivarCorreos([m.id]); });
+    bnd.items.unshift(m); bndCache().n=bnd.items.length; pinta(0);
+    toast('Vuelve a la bandeja','',null);
    });
   });
  }};
@@ -2835,7 +3235,9 @@
     'con ellos. La copia y la nube son tu red.</span></div>'+
    '<button class="nx-go" onclick="exportData()">Exportar copia (JSON)</button>'+
    '<button class="nx-go sec" onclick="importBackup()" style="margin-top:9px">Restaurar copia (JSON)</button>'+
-   '<button class="nx-go sec" onclick="cargarPlanInicial()" style="margin-top:9px">Cargar datos del plan (ago-2026)</button>'+
+   '<div style="font-size:11.5px;color:var(--nx-mut);margin:10px 2px 0">Tu copia es un archivo '+
+    'JSON: guárdalo donde tú puedas volver a encontrarlo. El código de la app es público, '+
+    'así que tus cifras no viven ahí.</div>'+
    '<button class="nx-go mal" onclick="resetAll()" style="margin-top:22px">Reiniciar todo</button></div>';
  }};
  P.p_acerca={html(){
@@ -3039,13 +3441,13 @@
   if(toco) try{ save(); }catch(e){ console.warn('NEXO cierres',e); }
  }
 
- /* Su configuración de sueldo, una sola vez: 1,484.97 el 15 y 1,484.97 a fin de
-    mes, a la cuenta bancaria, contando desde hoy (me pidió no registrar el
-    pago del 14 de agosto que ya había pasado). */
+ /* Deja el sueldo listo para configurar (una sola vez): quincenal, a la cuenta
+    bancaria, contando desde hoy. Los montos NO van en el código: se ponen en
+    Perfil → Mi sueldo, porque este archivo es público. */
  function sembrarSueldo(){
   if(S.cfg.sueldo) return;
   const cta=(S.cuentas||[]).find(a=>/cuenta bancaria|banco|sueldo/i.test(a.nombre))||(S.cuentas||[])[0];
-  S.cfg.sueldo={on:true,q1:1484.97,q2:1484.97,cuentaId:cta?cta.id:null,desde:keyOf(new Date())};
+  S.cfg.sueldo={on:false,q1:0,q2:0,cuentaId:cta?cta.id:null,desde:keyOf(new Date())};
   try{ save(); }catch(e){ console.warn('NEXO sueldo semilla',e); }
  }
 
@@ -3086,7 +3488,10 @@
  const _save=window.save;
  window.save=function(){ _save.apply(this,arguments); try{ if($('nx')) pinta(0); }catch(e){ console.warn('NEXO repintar',e); } };
 
- window.NX={go:go,volver:volver,pinta:()=>pinta(0)};
+ /* montoDeTexto y tcInfo se exponen solo para poder probarlos por separado:
+    son las dos piezas donde un error se convierte en plata equivocada. */
+ window.NX={go:go,volver:volver,pinta:()=>pinta(0),
+   monto:montoDeTexto, tasa:tcInfo};
  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',montar);
  else montar();
 })();
