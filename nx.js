@@ -2450,7 +2450,7 @@
  /* ---- categoría propuesta por el nombre del comercio ---- */
  const PISTAS=[
   [/pedidos ?ya|rappi|mass |metro |plaza vea|tottus|wong|vivanda|makro|market|panade|restaur|pollo|kfc|bembos|starbucks|juguer|men[uú]|cevich|pizza|burger/i,/aliment|comida/i],
-  [/movistar|claro|entel|bitel|win |internet|sedapal|enel|luz del sur|icloud|apple|google|netflix|spotify|disney|recarga|cable/i,/servici/i],
+  [/movistar|claro|entel|bitel|win |internet|sedapal|enel|luz del sur|icloud|apple|google|netflix|spotify|disney|recarga|cable|openai|chatgpt|anthropic|claude\.ai|github|adobe|canva|notion|figma|microsoft|dropbox|subscr/i,/servici/i],
   [/uber|indrive|didi|cabify|taxi|combi|grifo|primax|repsol|petro|pasaje|scania/i,/transp/i],
   [/coolbox|falabella|saga|ripley|oechsle|nike|adidas|shein|temu|aliexpress|mercadolibre|shopstar|hiraoka|promart|sodimac|izquierdo/i,/compra|ropa/i],
   [/inkafarma|mifarma|botica|farmacia|clinic|dental|hospital|laborator/i,/salud/i],
@@ -2474,11 +2474,34 @@
   return o?o.id:((S.categorias||[])[0]||{}).id;
  }
 
+ /* ---- consumos en dólares ----
+    El correo de un consumo en dólares NO trae tipo de cambio: el banco lo cobra
+    después, a su tasa. Antes eso se descartaba en silencio (así se perdió un
+    consumo de OPENAI). Ahora se propone el monto en soles con el último tipo de
+    cambio conocido, él lo ajusta si quiere, y de su ajuste se aprende la tasa. */
+ const TC_POR_DEFECTO=3.43;
+ const tcUsd=()=>+((S.cfg||{}).tcUsd)||TC_POR_DEFECTO;
+ function aprenderTc(usd,soles){
+  if(!(usd>0)||!(soles>0)) return;
+  const t=soles/usd;
+  if(t>2 && t<6){ S.cfg.tcUsd=Math.round(t*10000)/10000; try{ persist(); }catch(e){} }
+ }
+ /** lo que se va a anotar de verdad: su ajuste, el monto del correo, o el estimado */
+ function montoCorreo(m){
+  const e=bndEleccion[m.id];
+  if(e && +e.monto>0) return +e.monto;
+  if(+m.monto>0) return +m.monto;
+  if(+m.montoUsd>0) return Math.round(+m.montoUsd*tcUsd()*100)/100;
+  return 0;
+ }
+ const esEstimado=m=>!(+m.monto>0) && +m.montoUsd>0 && !((bndEleccion[m.id]||{}).monto>0);
+
  /** ¿Ya existe un movimiento del mismo día y monto? Sus datos tienen cosas
      tecleadas a mano, así que el correo puede ser el mismo gasto ya anotado. */
  function yaParecido(m){
+  const mo=montoCorreo(m);
   return (S.tx||[]).find(t => t.fecha===m.fecha &&
-    Math.abs((+t.monto||0)-(+m.monto||0))<0.01 && t.correoK!==m.id);
+    Math.abs((+t.monto||0)-mo)<0.01 && t.correoK!==m.id);
  }
 
  /* elecciones que él cambia antes de anotar: {catId, destino} por id de correo */
@@ -2498,7 +2521,7 @@
   if(d.tipo==='pagoCard'||d.tipo==='pagoLoan'){
    $('payCard').value=(d.tipo==='pagoLoan'?'l:':'c:')+d.id;
    $('payCard').dispatchEvent(new Event('change'));
-   $('payFecha').value=m.fecha; $('payMonto').value=String(+m.monto||0);
+   $('payFecha').value=m.fecha; $('payMonto').value=String(montoCorreo(m));
    addCardPayment();                                   // ← motor (sirve para los dos)
   } else {
    $('mFecha').value=m.fecha;
@@ -2513,13 +2536,14 @@
    if(cu) cu.value=String(e.cuotas||1);
    if(te) te.value='0';
    $('mConcepto').value=m.concepto||'Movimiento del banco';
-   $('mMonto').value=String(+m.monto||0);
+   $('mMonto').value=String(montoCorreo(m));
    if(typeof editId!=='undefined'&&editId) cancelEdit();
    addMov();                                           // ← motor
   }
   /* la marca del correo va en el movimiento recién creado, para no repetirlo */
   const ult=(S.tx||[]).slice().sort((a,b)=>b.id-a.id)[0];
   if(ult) ult.correoK=m.id;
+  if(+m.montoUsd>0) aprenderTc(+m.montoUsd, montoCorreo(m));
  }
 
  /** avisa a la nube que ya se resolvió (y lo recuerda local por si falla) */
@@ -2607,14 +2631,14 @@
      'data-k="'+h(m.id)+'" type="button">'+
      '<span class="tick">'+(on?'✓':'')+'</span>'+
      '<span class="cu"><span class="ln"><span class="b">'+(ICO_BANCO[m.banco]||'🏦')+' '+h(m.banco)+
-       (esTras?' · traslado':'')+'</span><b class="mo">'+fmt2(m.monto)+'</b></span>'+
+       (esTras?' · traslado':'')+'</span><b class="mo">'+fmt2(montoCorreo(m))+'</b></span>'+
       '<span class="cp">'+h(m.concepto||'Movimiento')+'</span>'+
       '<span class="fe">'+etiquetaFecha(m.fecha)+'</span></span>'+
      '</button>';
    }
    return '<div class="nx-mail" data-k="'+h(m.id)+'">'+
     '<div class="ln"><span class="b">'+(ICO_BANCO[m.banco]||'🏦')+' '+h(m.banco)+'</span>'+
-     '<b class="mo">'+fmt2(m.monto)+'</b></div>'+
+     '<b class="mo">'+fmt2(montoCorreo(m))+(esEstimado(m)?' <span style="font-size:10px;font-weight:600;color:var(--nx-warn)">aprox.</span>':'')+'</b></div>'+
     '<div class="cp">'+h(m.concepto||'Movimiento')+'</div>'+
     '<div class="fe">'+etiquetaFecha(m.fecha)+' · '+h(m.detalle||m.banco)+
       (esTras?' · <b>traslado entre lo tuyo</b>':'')+'</div>'+
@@ -2636,8 +2660,9 @@
          ? '<button class="chip" data-cuo="'+h(m.id)+'">'+
            ((e.cuotas||1)>1?'🧾 '+(e.cuotas)+' cuotas':'🧾 sin cuotas')+' ›</button>' : '')+
         (m.moneda==='USD'
-         ? '<span class="chip" style="pointer-events:none">💵 US$ '+
-           (+m.montoUsd||0).toFixed(2)+' al cambio</span>' : '')+
+         ? '<label class="chip usd">💵 US$ '+(+m.montoUsd||0).toFixed(2)+' × '+
+           '<input data-usd="'+h(m.id)+'" inputmode="decimal" value="'+
+           montoCorreo(m).toFixed(2)+'"> soles</label>' : '')+
        '</div>'+
        '<div class="bt"><button class="ok" data-ok="'+h(m.id)+'">Anotarlo</button>'+
        '<button class="no" data-no="'+h(m.id)+'">Descartar</button></div>')+
@@ -2697,7 +2722,7 @@
   if(selOk) selOk.onclick=()=>{
    const ids=Object.keys(bndSel).filter(k=>bndSel[k]);
    if(!ids.length) return;
-   const suma=bnd.items.filter(m=>ids.indexOf(m.id)>=0).reduce((a,m)=>a+(+m.monto||0),0);
+   const suma=bnd.items.filter(m=>ids.indexOf(m.id)>=0).reduce((a,m)=>a+montoCorreo(m),0);
    confirmar({titulo:'¿Marcar '+ids.length+' como vistos?',boton:'Sí, marcarlos',
      detalle:'<div>Suman '+fmt2(suma)+', pero <b>no se anota ninguno</b>: solo dejan de aparecer '+
       'en la bandeja. Tus totales no cambian. Queda un "Deshacer" por si te arrepientes.</div>'},
@@ -2711,12 +2736,24 @@
      n:c.nombre.split(' (')[0],s:c.bucket,e:emoCat(c)})),String(eleccionDe(m).catId||''),
      v=>{ eleccionDe(m).catId=+v; pinta(0); });
   });
+  /* el monto en soles de un consumo en dólares: se puede corregir a mano */
+  document.querySelectorAll('#nx-body [data-usd]').forEach(i=>{
+   i.onclick=ev=>ev.stopPropagation();
+   i.oninput=()=>{ i.value=i.value.replace(/[^0-9.]/g,''); };
+   i.onchange=()=>{
+    const m=bnd.items.find(x=>x.id===i.dataset.usd); if(!m) return;
+    const v=parseFloat(i.value)||0;
+    if(v>0){ eleccionDe(m).monto=v; aprenderTc(+m.montoUsd,v); }
+    pinta(0);
+   };
+  });
+
   document.querySelectorAll('#nx-body [data-cuo]').forEach(b=>b.onclick=()=>{
    const m=bnd.items.find(x=>x.id===b.dataset.cuo); if(!m) return;
    const e=eleccionDe(m); vib(8);
    const ops=[{v:'1',n:'Sin cuotas',e:'💳',s:'se paga en el próximo estado de cuenta'}]
     .concat([2,3,6,9,12,18,24].map(n=>({v:String(n),n:n+' cuotas',e:'🧾',
-      s:fmt((+m.monto||0)/n)+' por mes'})));
+      s:fmt(montoCorreo(m)/n)+' por mes'})));
    hoja('¿En cuántas cuotas la compraste?',ops,String(e.cuotas||1),
      v=>{ e.cuotas=+v||1; pinta(0); });
   });
@@ -2748,11 +2785,17 @@
    const r=simular(()=>anotarCorreo(m));
    const y=yaParecido(m);
    confirmar({titulo:'¿Anotar este movimiento?',boton:'Sí, anotar',
-     detalle:'<div><b>'+h(m.concepto||'Movimiento')+'</b> · '+fmt2(m.monto)+' el '+fechaCorta(m.fecha)+
+     detalle:'<div><b>'+h(m.concepto||'Movimiento')+'</b> · '+fmt2(montoCorreo(m))+' el '+fechaCorta(m.fecha)+
       '<br>'+(cat?'Categoría '+h(cat.nombre.split(' (')[0])+' · ':'')+h(dest)+
       ((e.cuotas||1)>1?'<br>En <b>'+e.cuotas+' cuotas</b> de '+fmt((+m.monto||0)/e.cuotas):'')+
       (m.moneda==='USD'?'<br>El correo vino en <b>US$ '+(+m.montoUsd||0).toFixed(2)+
-        '</b>; se anota el total cobrado en soles.':'')+'</div>'+
+        '</b>'+(esEstimado(m)
+          ? ' y no trae tipo de cambio. Se anota <b>'+fmt2(montoCorreo(m))+
+            '</b> usando S/ '+tcUsd().toFixed(2)+' por dólar: es un <b>estimado</b>, '+
+            'ajústalo cuando lo veas en tu estado de cuenta.'
+          : (+(bndEleccion[m.id]||{}).monto>0
+             ? '; en soles va el monto que escribiste tú.'
+             : '; se anota el total cobrado en soles.')):'')+'</div>'+
       (y?'<div style="color:var(--nx-warn);margin-top:6px">Ojo: ya tienes <b>'+
         h((y.concepto||'algo').slice(0,28))+'</b> por '+fmt2(y.monto)+' ese día. '+
         'Si es el mismo gasto, cancela y descártalo.</div>':'')+
@@ -2765,7 +2808,7 @@
     bnd.items=bnd.items.filter(x=>x.id!==m.id);
     bndCache().n=bnd.items.length;
     save(); pinta(0);
-    toast('Movimiento anotado',h(m.concepto||'')+' '+fmt2(m.monto),
+    toast('Movimiento anotado',h(m.concepto||'')+' '+fmt2(montoCorreo(m)),
       ()=>{ S=JSON.parse(antes); persist(); renderAll();
             bnd.items.unshift(m); pinta(0); toast('Se deshizo','',null); });
    });

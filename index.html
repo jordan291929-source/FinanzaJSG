@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="fonts/inter.css">
-<link rel="stylesheet" href="nx.css?v=480">
+<link rel="stylesheet" href="nx.css?v=481">
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
@@ -1037,7 +1037,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='4.8.0'; // se actualiza con cada mejora del sistema
+const APP_VERSION='4.8.1'; // se actualiza con cada mejora del sistema
 /* un `const` de nivel superior NO queda en window, y por eso la versión salía
    vacía en Perfil y en Acerca de. Se expone a mano. */
 window.APP_VERSION=APP_VERSION;
@@ -3119,6 +3119,6 @@ addEventListener('load',()=>{
  try{ pintarTodo(); }catch(e){ console.warn('v3.6.0:',e); }
 })();
 </script>
-<script src="nx.js?v=480"></script>
+<script src="nx.js?v=481"></script>
 </body>
 </html>
