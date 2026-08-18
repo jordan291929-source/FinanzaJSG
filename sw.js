@@ -1,11 +1,11 @@
 /* Service worker: deja la app usable sin internet.
    Sube CACHE cada vez que edites index.html o el vendor. */
-const CACHE = 'finanzas-v4.6.0';
+const CACHE = 'finanzas-v4.6.1';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './vendor/chart.umd.min.js', './vendor/jspdf.umd.min.js',
   './vendor/jspdf.plugin.autotable.min.js', './vendor/xlsx.full.min.js',
-  './fonts/inter.css', './nx.css?v=460', './nx.js?v=460',
+  './fonts/inter.css', './nx.css?v=461', './nx.js?v=461',
   './fonts/inter-latin-400-normal.woff2', './fonts/inter-latin-500-normal.woff2',
   './fonts/inter-latin-600-normal.woff2', './fonts/inter-latin-700-normal.woff2',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'

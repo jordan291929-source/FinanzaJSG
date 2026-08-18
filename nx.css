@@ -10,7 +10,11 @@
 
 :root{
  --nx-bg:#e9e7e1; --nx-surf:#ffffff; --nx-surf2:#f5f4f0;
- --nx-ink:#10201f; --nx-ink2:#334745; --nx-mut:#4f6867; --nx-faint:#64807e;
+ --nx-ink:#10201f; --nx-ink2:#334745; --nx-mut:#4f6867;
+ /* medido, no a ojo: #64807e daba 3.44:1 sobre el fondo cálido y los chevrones
+    y los ✕ quedaban por debajo del mínimo. Este da 4.55:1 sobre el fondo y
+    5.63:1 sobre el blanco de las tarjetas. */
+ --nx-faint:#4f6d6b;
  --nx-line:#e2e0d9; --nx-line2:#d0cec6;
  --nx-brand:#00636d; --nx-brand2:#00838f;
  --nx-deep1:#005962; --nx-deep2:#002f38;
@@ -55,13 +59,27 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
 #nx ::selection{background:transparent}
 
 #nx{max-width:520px;margin:0 auto;min-height:100vh;position:relative;
- font-family:'Inter',system-ui,Arial,sans-serif;font-size:14px;line-height:1.5}
+ font-family:'Inter',system-ui,Arial,sans-serif;font-size:14px;line-height:1.5;
+ /* Los bloques que se toman prestados de la app vieja (tablas de cuentas,
+    recurrentes, calendario) usan su propio --muted, que sobre el fondo cálido
+    daba 3.69:1. Redefinirlo aquí los arregla todos de una vez. */
+ --muted:#4f6d6b; --faint:#4f6d6b}
+/* La ✕ de borrar de las tablas prestadas tiene su propio color y quedaba en
+   4.05:1. Rojo tenue: se lee (5.4:1) y además dice mejor lo que hace. */
+#nx .del{color:#a3253a}
+/* Los botones sin clase de la app vieja ("Conectar", "Agregar") venían con un
+   degradado claro y blanco encima: 3.27:1. Se les pone el degradado de la
+   interfaz nueva, que con blanco da 5.9:1. */
+#nx #nxSub button:not([class]){background:linear-gradient(140deg,var(--nx-brand),#004a54);
+ color:#fff;border-radius:12px}
 #nx *{box-sizing:border-box}
+#nx button{font-family:inherit;cursor:pointer}
 /* La app vieja trae un `button{color:#fff}` global que se cuela dentro de #nx y
-   ya me pintó texto blanco sobre blanco tres veces (campo Cuenta, tarjetas de
-   la bandeja...). En vez de ir rescatando clase por clase, todos los botones de
-   #nx heredan el color de su contexto y los que sí van en blanco lo piden. */
-#nx button{font-family:inherit;cursor:pointer;color:inherit}
+   ya me pintó texto blanco sobre blanco (campo Cuenta, casillas de la bandeja).
+   Este reset lo neutraliza SIN pisar a los componentes: `:where()` no suma
+   especificidad, así que cualquier regla de clase de más abajo (.nx-go, la
+   tarjeta de crédito, la barra) sigue mandando con su blanco. */
+.nx-on :where([class*="nx-"]){color:inherit}
 .nx-scroll{padding:0 16px calc(var(--nx-navh) + env(safe-area-inset-bottom) + 74px)}
 /* el aire de abajo sale de la altura real de la barra más el sitio del botón + */
 .nx-num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
@@ -202,9 +220,12 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
  border-radius:var(--nx-r);padding:17px 18px;margin-bottom:16px;box-shadow:var(--nx-sh2)}
 .nx-cyc .h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .nx-cyc .h span{font-size:11.5px;color:rgba(255,255,255,.72)}
-.nx-cyc .tag{flex:0 0 auto;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;
- background:#f7ab5d;color:#3a2200;text-transform:uppercase;letter-spacing:.04em}
-.nx-cyc .tag.ok{background:#8fe3b5;color:#08301f}
+/* OJO con la especificidad: `.nx-cyc .h span` (0,2,1) le ganaba a `.nx-cyc .tag`
+   (0,2,0) y el chip salía en blanco al 72% sobre naranja — 1.92:1, ilegible.
+   Con `.nx-cyc .h .tag` (0,3,0) manda el color oscuro: 6.6:1. */
+.nx-cyc .tag,.nx-cyc .h .tag{flex:0 0 auto;font-size:10px;font-weight:700;padding:3px 9px;
+ border-radius:20px;background:#f7ab5d;color:#3a2200;text-transform:uppercase;letter-spacing:.04em}
+.nx-cyc .tag.ok,.nx-cyc .h .tag.ok{background:#8fe3b5;color:#08301f}
 .nx-cyc .big{font-size:31px;font-weight:700;letter-spacing:-.035em;margin-top:5px}
 .nx-cyc .two{display:flex;gap:26px;margin-top:14px}
 .nx-cyc .two div span{display:block;font-size:10.5px;color:rgba(255,255,255,.66);
@@ -514,12 +535,21 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
  z-index:90;max-width:496px;margin:0 auto;display:flex;align-items:center;gap:12px;
  background:var(--nx-ink);color:var(--nx-bg);border-radius:14px;padding:12px 14px;
  box-shadow:0 8px 26px -10px rgba(8,20,19,.6);
- transform:translateY(140%);opacity:0;transition:transform .3s cubic-bezier(.32,.72,0,1),opacity .25s}
-#nx-toast.on{transform:none;opacity:1}
+ transform:translateY(140%);opacity:0;transition:transform .3s cubic-bezier(.32,.72,0,1),opacity .25s;
+ /* OJO: con opacity:0 seguía capturando toques aunque estuviera invisible, así
+    que se comía clicks de lo que había debajo. Solo recibe toques cuando se ve. */
+ pointer-events:none}
+#nx-toast.on{transform:none;opacity:1;pointer-events:auto}
 #nx-toast .tt{flex:1 1 auto;min-width:0;font-size:12.5px;line-height:1.4}
 #nx-toast .tt b{display:block;font-size:13px;font-weight:700}
-#nx-toast button{flex:0 0 auto;background:none;border:0;color:var(--nx-brand2);
- font-weight:700;font-size:13px;padding:8px 6px;min-height:36px}
+#nx-toast button#nxUndo{flex:0 0 auto;background:rgba(255,255,255,.1);border:0;
+ color:var(--nx-brand2);font-weight:700;font-size:13px;padding:9px 13px;min-height:38px;
+ border-radius:10px;margin-left:4px}
+#nx-toast button.x{flex:0 0 auto;background:none;border:0;padding:8px 2px 8px 6px;
+ min-height:36px;line-height:0;opacity:.6}
+#nx-toast button.x svg{width:13px;height:13px;stroke:currentColor;stroke-width:2.2;fill:none;
+ stroke-linecap:round;display:block}
+#nx-toast{touch-action:pan-y}
 @media(prefers-color-scheme:dark){
  #nx-toast{background:var(--nx-surf2);color:var(--nx-ink);border:1px solid var(--nx-line)}
 }

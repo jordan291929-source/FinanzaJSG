@@ -176,15 +176,50 @@
 
  /* ---- aviso con "Deshacer" para los cambios de un campo ---- */
  let tst=null, tstT=null, copiaPrevia=null;
+ /* El aviso se quedaba 7 segundos, tapaba contenido e invitaba a tocar
+    "Deshacer" sin querer, y no había forma de sacarlo. Ahora dura menos, se va
+    deslizándolo con el dedo y trae una ✕. El botón de deshacer queda separado
+    del resto para que no se toque de casualidad. */
+ function ocultarToast(){ if(tst){ clearTimeout(tstT); tst.classList.remove('on'); } }
  function toast(titulo,detalle,alDeshacer){
   if(!tst){ tst=document.createElement('div'); tst.id='nx-toast'; document.body.appendChild(tst); }
   tst.innerHTML='<div class="tt"><b>'+h(titulo)+'</b>'+(detalle?h(detalle):'')+'</div>'+
-   (alDeshacer?'<button id="nxUndo">Deshacer</button>':'');
+   (alDeshacer?'<button id="nxUndo">Deshacer</button>':'')+
+   '<button id="nxToastX" class="x" aria-label="Cerrar aviso">'+CERRAR_X+'</button>';
   const u=$('nxUndo');
-  if(u) u.onclick=()=>{ vib(16); clearTimeout(tstT); tst.classList.remove('on'); alDeshacer(); };
+  if(u) u.onclick=()=>{ vib(16); ocultarToast(); alDeshacer(); };
+  const x=$('nxToastX'); if(x) x.onclick=()=>{ vib(6); ocultarToast(); };
   clearTimeout(tstT);
+  tst.style.transform=''; tst.style.opacity='';
   requestAnimationFrame(()=>tst.classList.add('on'));
-  tstT=setTimeout(()=>tst.classList.remove('on'),7000);
+  tstT=setTimeout(ocultarToast, alDeshacer?4500:2800);
+
+  /* deslizar para descartar: hacia abajo o a un lado */
+  let x0=0,y0=0,arr=false;
+  const mover=e=>{
+   const t=e.touches?e.touches[0]:e;
+   const dx=t.clientX-x0, dy=Math.max(0,t.clientY-y0);
+   if(!arr && Math.abs(dx)<6 && dy<6) return;
+   arr=true;
+   tst.style.transition='none';
+   tst.style.transform='translate('+dx+'px,'+dy+'px)';
+   tst.style.opacity=String(Math.max(0,1-(Math.abs(dx)+dy)/160));
+  };
+  const soltar=e=>{
+   tst.removeEventListener('touchmove',mover);
+   tst.removeEventListener('touchend',soltar);
+   tst.style.transition='';
+   const t=(e.changedTouches?e.changedTouches[0]:e)||{clientX:x0,clientY:y0};
+   const lejos=Math.abs(t.clientX-x0)>60 || (t.clientY-y0)>50;
+   if(lejos){ tst.style.transform=''; tst.style.opacity=''; ocultarToast(); }
+   else { tst.style.transform=''; tst.style.opacity=''; }
+   arr=false;
+  };
+  tst.ontouchstart=e=>{
+   const t=e.touches[0]; x0=t.clientX; y0=t.clientY; arr=false;
+   tst.addEventListener('touchmove',mover,{passive:true});
+   tst.addEventListener('touchend',soltar);
+  };
  }
 
  function barraTop(titulo,sub,derecha){
