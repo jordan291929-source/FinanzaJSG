@@ -110,7 +110,7 @@ function interpretar_(m) {
     base.monto = num_(mm[1]);
     /* El pago de un servicio trae "Empresa: Movistar": ese nombre vale más que
        un genérico "Yapeo". Después va el comercio del "Tu pago en X". */
-    const emp = (t.match(/Empresa:?\s*([^\n|]+)/i) || [])[1];
+    const emp = empresaSuelta_(t);
     const co = t.match(/Tu pago en\s+([^\n!¡]+?)\s*(?:fue exitoso|!)/i);
     base.concepto = titulo_(emp) || (co ? titulo_(co[1]) : '') ||
                     (/servicio fue yapeado/i.test(t) ? 'Yapeo de servicio' : 'Yapeo');
@@ -199,8 +199,7 @@ function interpretar_(m) {
       if (!mm) return null;
       base.monto = num_(mm[1]);
       base.medio = 'cuenta-bcp';
-      const emp = (t.match(/Empresa:?\s*([^\n|]+)/i) || [])[1];
-      base.concepto = titulo_(emp || 'Pago de servicios');
+      base.concepto = titulo_(empresaSuelta_(t) || 'Pago de servicios');
       base.fecha = fechaBcpCorta_((t.match(/Fecha y hora:?\s*([^\n|]+)/i) || [])[1]) || fechaDe_(m);
       base.id = 'bcp-' + ((t.match(/N[uú]mero de operaci[oó]n:?\s*(\d+)/i) || [])[1] || m.getId());
       return base;
@@ -268,6 +267,16 @@ function campo_(t, etiqueta) {
                         '\\s*\\|\\s*([^|\\n]+?)\\s*\\|', 'i');
   const m = t.match(re);
   return m ? m[1].trim() : '';
+}
+
+/** El BCP y Yape escriben "Empresa: *PAGOEFECTIVO* Servicio: *...* Titular: ..."
+ *  todo en una línea. Se limpian los asteriscos y se corta en la siguiente
+ *  etiqueta, o el concepto salía como un párrafo entero. */
+function empresaSuelta_(t) {
+  let e = (String(t).match(/Empresa:?\s*([^\n|]+)/i) || [])[1] || '';
+  e = e.replace(/\*/g, ' ')
+       .split(/\b(?:Servicio|Titular|C[oó]digo|N[uú]mero|Fecha|Total|Importe|Recibo|Vencimiento)\s*:/i)[0];
+  return e.replace(/\s+/g, ' ').trim().slice(0, 40);
 }
 
 function num_(s) {
