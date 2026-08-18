@@ -100,7 +100,11 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
  stroke-linecap:round;stroke-linejoin:round;display:block}
 .nx-top .rt button{padding:0;line-height:0}
 .nx-ico:active{transform:scale(.94)}
-.nx-ico .dot{position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:#f7ab5d}
+/* la campana lleva el conteo de avisos, no solo un punto */
+.nx-ico .dot{position:absolute;top:-3px;right:-3px;min-width:17px;height:17px;padding:0 4px;
+ border-radius:9px;background:#f7ab5d;color:#3a2200;font-size:10px;font-weight:700;
+ line-height:17px;text-align:center;border:2px solid var(--nx-deep1)}
+.nx-ico .dot.alto{background:#ff8a6b;color:#3d0f04}
 .nx-hero .lbl{display:flex;align-items:center;gap:9px;margin-top:18px;
  font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.7)}
 .nx-hero .big{font-size:36px;font-weight:700;letter-spacing:-.035em;line-height:1.06;margin-top:2px}
@@ -130,6 +134,10 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
 .nx-alert b{display:block;font-size:12.5px;font-weight:600;line-height:1.3}
 .nx-alert span{display:block;font-size:11.5px;color:var(--nx-mut);margin-top:2px}
 .nx-alert a{display:inline-block;margin-top:5px;font-size:11.5px;font-weight:600;color:var(--nx-brand)}
+/* aviso único a lo ancho, con el enlace de acción y el "+N avisos" en una fila */
+.nx-alert.solo{flex:1 1 auto;width:100%;margin:0 0 16px}
+.nx-alert.solo .ax{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.nx-alert.solo .ax a.mas{color:var(--nx-mut)}
 
 /* ---------- títulos de sección ---------- */
 .nx-st{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px}
