@@ -636,9 +636,50 @@
     (t.cuotas>1?kv('Cuotas',t.cuotas):'')+
     (t.payCardId||t.payLoanId?kv('Tipo','Pago de deuda'):'')+
    '</div>'+
-   '<button class="nx-go mal" id="nxDel">Eliminar movimiento</button>'+
+   (t.tipo!=='Ingreso'
+    ? '<button class="nx-go sec" id="nxDev" style="margin-top:10px">Me devolvieron esta compra</button>'
+    : '')+
+   '<button class="nx-go mal" id="nxDel"'+(t.tipo!=='Ingreso'?' style="margin-top:9px"':'')+
+    '>Eliminar movimiento</button>'+
    '</div>';
  },wire(p){
+  /* Devolución / extorno: la plata vuelve, pero el gasto ya está anotado. Se
+     registra la entrada con la MISMA categoría, así el mes queda neto y no se
+     pierde el rastro de la compra original. */
+  const dev=$('nxDev');
+  if(dev) dev.onclick=()=>{
+   const t=(S.tx||[]).find(x=>x.id===p.id); if(!t) return;
+   vib(8);
+   if(t.cardId){
+    confirmar({titulo:'Fue una compra a crédito',boton:'Ir a registrar el pago',
+      detalle:'<div>Una devolución de tarjeta llega como <b>nota de crédito</b> en tu estado de '+
+       'cuenta: no entra plata a tu bolsillo, te baja la deuda. Anótala como un <b>pago a la '+
+       'tarjeta</b> por '+fmt2(t.monto)+'.</div>'},()=>{
+     go('pagar',{tipo:'c',id:t.cardId});
+    });
+    return;
+   }
+   const antes=JSON.stringify(S);
+   const r=simular(()=>{ S.tx.push({id:-2,fecha:keyOf(new Date()),tipo:'Ingreso',catId:t.catId,
+     cuentaId:t.cuentaId,concepto:'Devolución: '+(t.concepto||''),monto:+t.monto||0}); });
+   confirmar({titulo:'¿Anotar la devolución?',boton:'Sí, me la devolvieron',
+     detalle:'<div>Entra <b>'+fmt2(t.monto)+'</b> hoy a <b>'+
+      h((ctaById(t.cuentaId)||{}).nombre||'tu cuenta')+'</b> como ingreso, con el nombre '+
+      '«Devolución». La compra original <b>se queda anotada</b>, así ves las dos caras y '+
+      'tu disponible vuelve a estar bien.</div>'+
+      lineaCambio('Disponible del mes',r.cajaA,r.cajaB)},()=>{
+    vib(18);
+    anotarRapido({tipo:'Ingreso',monto:+t.monto||0,catId:t.catId,
+      cuentaVal:'a:'+t.cuentaId,desc:'Devolución: '+(t.concepto||'')});
+    /* el motor no guarda categoría en los ingresos: se le pone la misma de la
+       compra para poder rastrear el par gasto/devolución */
+    const ult=(S.tx||[]).slice().sort((x,y)=>y.id-x.id)[0];
+    if(ult&&ult.tipo==='Ingreso'){ ult.catId=t.catId; ult.devDe=t.id; try{ save(); }catch(e){} }
+    toast('Devolución anotada',fmt(t.monto)+' de vuelta',
+      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Se deshizo','',null); });
+    volver();
+   });
+  };
   const b=$('nxDel'); if(!b) return;
   /* antes salían dos preguntas: el confirm del navegador y el aviso propio que
      ya trae el borrado envuelto. Ahora pregunta una vez, con las cifras. */
@@ -1231,7 +1272,7 @@
   $('mFecha').value=keyOf(new Date());
   $('mTipo').value=o.tipo||'Gasto';
   syncMovForm();
-  if((o.tipo||'Gasto')==='Gasto' && o.catId) $('mCat').value=o.catId;
+  if(o.catId) $('mCat').value=o.catId;
   $('mCuenta').value=o.cuentaVal; toggleCredito();
   $('mConcepto').value=o.desc||nomCat(o.catId);
   $('mMonto').value=String(o.monto);
@@ -2383,17 +2424,26 @@
 
  /* ---- de qué cuenta o tarjeta salió ---- */
  function destinoCorreo(m){
-  const C=(S.cuentas||[]), T=(S.tarjetas||[]);
+  const C=(S.cuentas||[]), T=(S.tarjetas||[]), L=(S.loans||[]);
   const cta=re=>C.find(a=>re.test(a.nombre||''));
   const tar=re=>T.find(c=>re.test(c.nombre||''));
+  const pre=re=>L.find(l=>re.test(l.nombre||''));
   const p=(o,tipo)=>o?{tipo:tipo,id:o.id,rot:o.nombre}:null;
+  const esPago=(m.tipo==='Pago de deuda');
   let r=null;
-  if(m.medio==='credito-bcp')  r=p(tar(/bcp/i),'card');
+  /* pagar su propia tarjeta NO es un gasto nuevo: baja la deuda */
+  if(m.medio==='credito-bcp')  r=esPago?p(tar(/bcp/i),'pagoCard'):p(tar(/bcp/i),'card');
   else if(m.medio==='debito-bcp') r=p(cta(/d[eé]bito/i)||cta(/cuenta/i),'cta');
   else if(m.medio==='cuenta-bcp') r=p(cta(/cuenta bancaria|banco|ahorro/i)||C[0],'cta');
   else if(m.medio==='yape')      r=p(cta(/yape|plin/i)||C[0],'cta');
-  else if(m.medio==='interbank') r=(m.tipo==='Pago de deuda')
+  else if(m.medio==='interbank') r=esPago
       ? p(tar(/interbank|ibk/i),'pagoCard') : p(cta(/cuenta bancaria|banco/i)||C[0],'cta');
+  /* Huancayo y Ripley: él los usa para pagar deudas, así que si existe el
+     préstamo con ese nombre se propone abonar a ESA deuda. */
+  else if(m.medio==='huancayo')  r=(esPago?p(pre(/huancayo/i),'pagoLoan'):null)
+      || p(cta(/huancayo/i)||C[0],'cta');
+  else if(m.medio==='ripley')    r=(esPago?p(pre(/ripley/i),'pagoLoan'):null)
+      || p(cta(/ripley/i)||C[0],'cta');
   return r||p(C[0],'cta')||{tipo:'cta',id:null,rot:'sin cuenta'};
  }
 
@@ -2445,11 +2495,11 @@
  /** lo anota de verdad, con las funciones del motor */
  function anotarCorreo(m){
   const e=eleccionDe(m), d=e.dest;
-  if(d.tipo==='pagoCard'){
-   $('payCard').value='c:'+d.id;
+  if(d.tipo==='pagoCard'||d.tipo==='pagoLoan'){
+   $('payCard').value=(d.tipo==='pagoLoan'?'l:':'c:')+d.id;
    $('payCard').dispatchEvent(new Event('change'));
    $('payFecha').value=m.fecha; $('payMonto').value=String(+m.monto||0);
-   addCardPayment();                                   // ← motor
+   addCardPayment();                                   // ← motor (sirve para los dos)
   } else {
    $('mFecha').value=m.fecha;
    $('mTipo').value='Gasto';
@@ -2458,7 +2508,9 @@
    $('mCuenta').value=(d.tipo==='card'?'card:':'a:')+d.id;
    toggleCredito();
    const cu=$('mCuotas'), te=$('mTea');
-   if(cu) cu.value='1';
+   /* una compra a crédito puede ser en cuotas: el correo nunca lo dice, así que
+      lo elige él en la bandeja. Sin esto todo entraba como un cargo único. */
+   if(cu) cu.value=String(e.cuotas||1);
    if(te) te.value='0';
    $('mConcepto').value=m.concepto||'Movimiento del banco';
    $('mMonto').value=String(+m.monto||0);
@@ -2578,8 +2630,14 @@
      : '<div class="ch">'+
         '<button class="chip" data-cat="'+h(m.id)+'">'+(cat?emoCat(cat)+' '+h(rotCat(cat)):'sin categoría')+' ›</button>'+
         '<button class="chip" data-dst="'+h(m.id)+'">'+
-         (e.dest.tipo==='pagoCard'?'💸 Pago a '+h(e.dest.rot)
+         (e.dest.tipo==='pagoCard'||e.dest.tipo==='pagoLoan'?'💸 Pago a '+h(e.dest.rot)
           :e.dest.tipo==='card'?'💳 '+h(e.dest.rot):'🏦 '+h(e.dest.rot))+' ›</button>'+
+        (e.dest.tipo==='card'
+         ? '<button class="chip" data-cuo="'+h(m.id)+'">'+
+           ((e.cuotas||1)>1?'🧾 '+(e.cuotas)+' cuotas':'🧾 sin cuotas')+' ›</button>' : '')+
+        (m.moneda==='USD'
+         ? '<span class="chip" style="pointer-events:none">💵 US$ '+
+           (+m.montoUsd||0).toFixed(2)+' al cambio</span>' : '')+
        '</div>'+
        '<div class="bt"><button class="ok" data-ok="'+h(m.id)+'">Anotarlo</button>'+
        '<button class="no" data-no="'+h(m.id)+'">Descartar</button></div>')+
@@ -2653,17 +2711,31 @@
      n:c.nombre.split(' (')[0],s:c.bucket,e:emoCat(c)})),String(eleccionDe(m).catId||''),
      v=>{ eleccionDe(m).catId=+v; pinta(0); });
   });
+  document.querySelectorAll('#nx-body [data-cuo]').forEach(b=>b.onclick=()=>{
+   const m=bnd.items.find(x=>x.id===b.dataset.cuo); if(!m) return;
+   const e=eleccionDe(m); vib(8);
+   const ops=[{v:'1',n:'Sin cuotas',e:'💳',s:'se paga en el próximo estado de cuenta'}]
+    .concat([2,3,6,9,12,18,24].map(n=>({v:String(n),n:n+' cuotas',e:'🧾',
+      s:fmt((+m.monto||0)/n)+' por mes'})));
+   hoja('¿En cuántas cuotas la compraste?',ops,String(e.cuotas||1),
+     v=>{ e.cuotas=+v||1; pinta(0); });
+  });
+
   document.querySelectorAll('#nx-body [data-dst]').forEach(b=>b.onclick=()=>{
    const m=bnd.items.find(x=>x.id===b.dataset.dst); if(!m) return;
    vib(8);
    const ops=(S.cuentas||[]).map(a=>({v:'cta:'+a.id,n:a.nombre,e:'🏦',s:'sale de esta cuenta'}))
     .concat((S.tarjetas||[]).map(c=>({v:'card:'+c.id,n:c.nombre,e:'💳',s:'consumo con la tarjeta'})))
     .concat((S.tarjetas||[]).map(c=>({v:'pagoCard:'+c.id,n:'Pago a '+c.nombre,e:'💸',
-      s:'abona a la deuda de la tarjeta'})));
+      s:'abona a la deuda de la tarjeta'})))
+    .concat((S.loans||[]).map(l=>({v:'pagoLoan:'+l.id,n:'Pago a '+l.nombre,e:'💸',
+      s:'abona a la cuota del préstamo'})));
    const e=eleccionDe(m);
    hoja('¿De dónde salió?',ops,e.dest.tipo+':'+e.dest.id,v=>{
     const p=v.split(':'), id=+p[1];
-    const rot=(p[0]==='cta'?(ctaById(id)||{}).nombre:((S.tarjetas||[]).find(x=>x.id===id)||{}).nombre)||'';
+    const rot=(p[0]==='cta'?(ctaById(id)||{}).nombre
+      :p[0]==='pagoLoan'?((S.loans||[]).find(x=>x.id===id)||{}).nombre
+      :((S.tarjetas||[]).find(x=>x.id===id)||{}).nombre)||'';
     e.dest={tipo:p[0],id:id,rot:rot}; pinta(0);
    });
   });
@@ -2671,12 +2743,16 @@
   document.querySelectorAll('#nx-body [data-ok]').forEach(b=>b.onclick=()=>{
    const m=bnd.items.find(x=>x.id===b.dataset.ok); if(!m) return;
    const e=eleccionDe(m), cat=catById(e.catId), mm=mesSel();
-   const dest=e.dest.tipo==='pagoCard'?'pago de '+e.dest.rot:e.dest.rot;
+   const dest=(e.dest.tipo==='pagoCard'||e.dest.tipo==='pagoLoan')
+     ? 'baja la deuda de '+e.dest.rot : e.dest.rot;
    const r=simular(()=>anotarCorreo(m));
    const y=yaParecido(m);
    confirmar({titulo:'¿Anotar este movimiento?',boton:'Sí, anotar',
      detalle:'<div><b>'+h(m.concepto||'Movimiento')+'</b> · '+fmt2(m.monto)+' el '+fechaCorta(m.fecha)+
-      '<br>'+(cat?'Categoría '+h(cat.nombre.split(' (')[0])+' · ':'')+h(dest)+'</div>'+
+      '<br>'+(cat?'Categoría '+h(cat.nombre.split(' (')[0])+' · ':'')+h(dest)+
+      ((e.cuotas||1)>1?'<br>En <b>'+e.cuotas+' cuotas</b> de '+fmt((+m.monto||0)/e.cuotas):'')+
+      (m.moneda==='USD'?'<br>El correo vino en <b>US$ '+(+m.montoUsd||0).toFixed(2)+
+        '</b>; se anota el total cobrado en soles.':'')+'</div>'+
       (y?'<div style="color:var(--nx-warn);margin-top:6px">Ojo: ya tienes <b>'+
         h((y.concepto||'algo').slice(0,28))+'</b> por '+fmt2(y.monto)+' ese día. '+
         'Si es el mismo gasto, cancela y descártalo.</div>':'')+
