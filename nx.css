@@ -364,6 +364,7 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
    botones que sí son oscuros (.nx-go, .nx-ico, .nx-eye, .nx-fab). */
 .nx-fld,.nx-meta,.nx-cat,.nx-row,.nx-card:not(.credito),
 .nx-chips button:not(.on),.nx-pad button,.nx-keys button:not(.plain),.nx-icos button,
+.nx-mail .chip,
 .nx-tog button.on,.nx-top .bk,.nx-top .rt button{color:var(--nx-ink)}
 .nx-tog button:not(.on),.nx-keys button.plain{color:var(--nx-mut)}
 .nx-fld .k{color:var(--nx-mut)}
@@ -384,6 +385,29 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
 .nx-icos button.on{border-color:var(--nx-brand);background:var(--nx-surf);
  box-shadow:0 0 0 2px rgba(0,99,109,.16)}
 .nx-icos button:active{transform:scale(.92)}
+
+
+/* ---------- bandeja del banco: una tarjeta por operación detectada ---------- */
+.nx-mail{background:var(--nx-surf);border:1px solid var(--nx-line);border-radius:15px;
+ padding:13px 14px;margin-bottom:10px;box-shadow:var(--nx-sh)}
+.nx-mail .ln{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.nx-mail .b{font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--nx-mut)}
+.nx-mail .mo{font-size:17px;font-weight:700;letter-spacing:-.02em;
+ font-variant-numeric:tabular-nums}
+.nx-mail .cp{font-size:14.5px;font-weight:600;margin-top:4px;line-height:1.25}
+.nx-mail .fe{font-size:11.5px;color:var(--nx-mut);margin-top:2px}
+.nx-mail .nt{font-size:11.5px;color:var(--nx-mut);margin-top:8px;line-height:1.45}
+.nx-mail .ch{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.nx-mail .chip{background:var(--nx-surf2);border:1px solid var(--nx-line);border-radius:20px;
+ padding:7px 11px;min-height:32px;font-size:11.5px;font-weight:600;color:var(--nx-ink)}
+.nx-mail .chip:active{transform:scale(.97)}
+.nx-mail .bt{display:flex;gap:8px;margin-top:11px}
+.nx-mail .bt button{flex:1 1 0;min-height:42px;border-radius:12px;font-size:13px;font-weight:700;
+ border:0;padding:10px}
+.nx-mail .bt .ok{background:linear-gradient(140deg,var(--nx-brand),#004a54);color:#fff;
+ box-shadow:0 6px 16px -9px rgba(0,58,66,.6)}
+.nx-mail .bt .no{background:var(--nx-surf2);border:1px solid var(--nx-line2);color:var(--nx-mut)}
+.nx-mail .bt button:active{transform:scale(.98)}
 
 /* ---------- hoja inferior de selección ----------
    Antes el campo "Cuenta" era un botón que rotaba de opción en opción: no se

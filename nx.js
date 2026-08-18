@@ -270,6 +270,11 @@
     s:huer.map(r=>r.concepto).join(', ')+'. La app los dio por registrados pero no est\u00e1n.',
     a:{r:'Revisar y registrar \u2192',k:'huerfanos'}});
   }
+  const bc=(S.cfg&&S.cfg.correosCache)||null;
+  if(bc && bc.n>0) av.push({n:'medio',i:'📬',
+   t:bc.n+' movimiento'+(bc.n===1?'':'s')+' de tus correos del banco por revisar',
+   s:'BCP, Yape e Interbank. Ninguno se anota hasta que lo confirmes.',
+   a:{r:'Ver la bandeja →',k:'bandeja'}});
   const ps=proximoSueldo();
   if(ps){
    const dd=Math.round((new Date(ps.fecha+'T00:00')-hoy())/86400000);
@@ -1273,6 +1278,7 @@
   {g:'Mi cuenta',k:'p_cuentas',ic:'🏦',r:'Cuentas y tarjetas',s:'Medios de pago y líneas'},
   {g:'Mi cuenta',k:'p_sueldo',ic:'💰',r:'Sueldo quincenal',s:'15 y fin de mes, al día útil'},
   {g:'Finanzas',k:'p_eecc',ic:'📄',r:'Estado de cuenta mensual',s:'PDF y Excel al correo'},
+  {g:'Finanzas',k:'bandeja',ic:'📬',r:'Bandeja del banco',s:'Movimientos leídos de tus correos'},
   {g:'Finanzas',k:'p_cats',ic:'🎨',r:'Categorías',s:'Crear, renombrar, iconos y límites'},
   {g:'Finanzas',k:'p_recurrentes',ic:'🔁',r:'Recurrentes y favoritos',s:'Lo que se repite cada mes'},
   {g:'Finanzas',k:'p_calendario',ic:'🗓️',r:'Calendario',s:'Gasto día por día'},
@@ -1741,6 +1747,271 @@
   };
  }};
 
+
+ /* ================= bandeja: lo que dicen tus correos del banco =================
+    El Apps Script lee las notificaciones de BCP, Yape e Interbank y devuelve
+    una lista de operaciones. Aquí NO se calcula nada: cada movimiento que él
+    aprueba se registra con las funciones del motor (addMov / addCardPayment),
+    igual que si lo tecleara. Nada entra sin que lo confirme. */
+ const urlBandeja=dias=>{
+  let u=''; try{ u=getSyncUrl()||''; }catch(e){ u=''; }
+  if(!u) return '';
+  return u+(u.indexOf('?')>=0?'&':'?')+'bandeja=1&dias='+(dias||14)+'&t='+Date.now();
+ };
+ /* estado en memoria de la pantalla */
+ let bnd={fase:'nada', items:[], error:'', dias:14};
+
+ const bndVistos=()=>{ S.cfg.correosVistos=S.cfg.correosVistos||[]; return S.cfg.correosVistos; };
+ const bndCache=()=>{ S.cfg.correosCache=S.cfg.correosCache||{ts:0,n:0}; return S.cfg.correosCache; };
+
+ function traerBandeja(){
+  const u=urlBandeja(bnd.dias);
+  if(!u){ bnd={fase:'sinurl',items:[],error:'',dias:bnd.dias}; return Promise.resolve(); }
+  bnd.fase='cargando'; bnd.error='';
+  return fetch(u).then(r=>r.text()).then(txt=>{
+   let d; try{ d=JSON.parse(txt); }catch(e){
+    throw new Error(/accounts\.google|sign ?in|iniciar sesi|<html/i.test(txt)
+      ? 'La nube pidió iniciar sesión. Vuelve a publicar el script con acceso "Cualquier persona".'
+      : 'La nube respondió algo que no entiendo.');
+   }
+   if(d && d.error) throw new Error(String(d.error));
+   if(!d || !d.bandeja) throw new Error('Falta pegar Correos.gs en tu Apps Script: la nube no trae bandeja.');
+   const ya=bndVistos();
+   bnd.items=(d.bandeja||[]).filter(m=>m && m.id && ya.indexOf(m.id)<0);
+   bnd.fase='listo';
+   const c=bndCache(); c.ts=Date.now(); c.n=bnd.items.length;
+   try{ persist(); }catch(e){}
+  }).catch(e=>{ bnd.fase='error'; bnd.error=e.message||String(e); });
+ }
+
+ /* ---- de qué cuenta o tarjeta salió ---- */
+ function destinoCorreo(m){
+  const C=(S.cuentas||[]), T=(S.tarjetas||[]);
+  const cta=re=>C.find(a=>re.test(a.nombre||''));
+  const tar=re=>T.find(c=>re.test(c.nombre||''));
+  const p=(o,tipo)=>o?{tipo:tipo,id:o.id,rot:o.nombre}:null;
+  let r=null;
+  if(m.medio==='credito-bcp')  r=p(tar(/bcp/i),'card');
+  else if(m.medio==='debito-bcp') r=p(cta(/d[eé]bito/i)||cta(/cuenta/i),'cta');
+  else if(m.medio==='cuenta-bcp') r=p(cta(/cuenta bancaria|banco|ahorro/i)||C[0],'cta');
+  else if(m.medio==='yape')      r=p(cta(/yape|plin/i)||C[0],'cta');
+  else if(m.medio==='interbank') r=(m.tipo==='Pago de deuda')
+      ? p(tar(/interbank|ibk/i),'pagoCard') : p(cta(/cuenta bancaria|banco/i)||C[0],'cta');
+  return r||p(C[0],'cta')||{tipo:'cta',id:null,rot:'sin cuenta'};
+ }
+
+ /* ---- categoría propuesta por el nombre del comercio ---- */
+ const PISTAS=[
+  [/pedidos ?ya|rappi|mass |metro |plaza vea|tottus|wong|vivanda|makro|market|panade|restaur|pollo|kfc|bembos|starbucks|juguer|men[uú]|cevich|pizza|burger/i,/aliment|comida/i],
+  [/movistar|claro|entel|bitel|win |internet|sedapal|enel|luz del sur|icloud|apple|google|netflix|spotify|disney|recarga|cable/i,/servici/i],
+  [/uber|indrive|didi|cabify|taxi|combi|grifo|primax|repsol|petro|pasaje|scania/i,/transp/i],
+  [/coolbox|falabella|saga|ripley|oechsle|nike|adidas|shein|temu|aliexpress|mercadolibre|shopstar|hiraoka|promart|sodimac|izquierdo/i,/compra|ropa/i],
+  [/inkafarma|mifarma|botica|farmacia|clinic|dental|hospital|laborator/i,/salud/i],
+  [/smart ?fit|gym|fitness|deporte/i,/gym|deporte/i],
+  [/cine|steam|playstation|xbox|juego|concierto|teleticket/i,/entreten|ocio/i],
+  [/universidad|instituto|vallejo|upn|utp|curso|udemy|platzi|colegio/i,/educ|otros/i],
+  [/alquiler|arriendo|renta|luz|agua|arbitrio/i,/vivien|alquil/i]
+ ];
+ function catCorreo(m){
+  const txt=(m.concepto||'')+' '+(m.detalle||'');
+  if(m.tipo==='Pago de deuda'){
+   const d=(S.categorias||[]).find(c=>c.auto==='deuda'); if(d) return d.id;
+  }
+  for(let i=0;i<PISTAS.length;i++){
+   if(PISTAS[i][0].test(txt)){
+    const c=(S.categorias||[]).find(x=>PISTAS[i][1].test(x.nombre||''));
+    if(c) return c.id;
+   }
+  }
+  const o=(S.categorias||[]).find(x=>/otros/i.test(x.nombre||''));
+  return o?o.id:((S.categorias||[])[0]||{}).id;
+ }
+
+ /* elecciones que él cambia antes de anotar: {catId, destino} por id de correo */
+ let bndEleccion={};
+ const eleccionDe=m=>{
+  if(!bndEleccion[m.id]) bndEleccion[m.id]={catId:catCorreo(m), dest:destinoCorreo(m)};
+  return bndEleccion[m.id];
+ };
+
+ /** lo anota de verdad, con las funciones del motor */
+ function anotarCorreo(m){
+  const e=eleccionDe(m), d=e.dest;
+  if(d.tipo==='pagoCard'){
+   $('payCard').value='c:'+d.id;
+   $('payCard').dispatchEvent(new Event('change'));
+   $('payFecha').value=m.fecha; $('payMonto').value=String(+m.monto||0);
+   addCardPayment();                                   // ← motor
+  } else {
+   $('mFecha').value=m.fecha;
+   $('mTipo').value='Gasto';
+   syncMovForm();
+   if(e.catId) $('mCat').value=e.catId;
+   $('mCuenta').value=(d.tipo==='card'?'card:':'a:')+d.id;
+   toggleCredito();
+   const cu=$('mCuotas'), te=$('mTea');
+   if(cu) cu.value='1';
+   if(te) te.value='0';
+   $('mConcepto').value=m.concepto||'Movimiento del banco';
+   $('mMonto').value=String(+m.monto||0);
+   if(typeof editId!=='undefined'&&editId) cancelEdit();
+   addMov();                                           // ← motor
+  }
+  /* la marca del correo va en el movimiento recién creado, para no repetirlo */
+  const ult=(S.tx||[]).slice().sort((a,b)=>b.id-a.id)[0];
+  if(ult) ult.correoK=m.id;
+ }
+
+ /** avisa a la nube que ya se resolvió (y lo recuerda local por si falla) */
+ function archivarCorreos(ids){
+  if(!ids.length) return;
+  const v=bndVistos();
+  ids.forEach(i=>{ if(v.indexOf(i)<0) v.push(i); });
+  if(v.length>400) S.cfg.correosVistos=v.slice(-400);
+  try{ persist(); }catch(e){}
+  let u=''; try{ u=getSyncUrl()||''; }catch(e){}
+  if(!u) return;
+  fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'archivar',ids:ids}),redirect:'follow'}).catch(()=>{});
+ }
+
+ const ICO_BANCO={'BCP':'🔵','Yape':'🟣','Interbank':'🟢'};
+
+ P.bandeja={html(){
+  const hayUrl=(()=>{ try{ return !!getSyncUrl(); }catch(e){ return false; } })();
+  const c=bndCache();
+  const cab=barraTop('Bandeja del banco',
+    bnd.fase==='listo' ? (bnd.items.length?bnd.items.length+' por revisar':'todo revisado')
+    : bnd.fase==='cargando' ? 'leyendo tus correos…' : 'últimos '+bnd.dias+' días');
+
+  if(!hayUrl || bnd.fase==='sinurl')
+   return cab+'<div class="nx-scroll">'+
+    '<div class="nx-tip nxw"><span>☁️</span><span>Primero conecta la nube: la bandeja usa el '+
+     'mismo Apps Script que ya guarda tus datos. Ve a <b>Perfil → Sincronización</b> y pega tu URL.</span></div>'+
+    '<button class="nx-go" data-go="p_nube">Ir a Sincronización</button></div>';
+
+  if(bnd.fase==='nada')
+   return cab+'<div class="nx-scroll">'+
+    '<div class="nx-tip"><span>📬</span><span>Leo las notificaciones que te manda el banco por cada '+
+     'operación (BCP, Yape e Interbank) y te las dejo acá como movimientos listos para confirmar. '+
+     '<b>No se anota nada sin tu visto bueno</b>, y tus correos no salen de tu cuenta de Google.</span></div>'+
+    (c.n?'<div class="nx-tip"><span>🔔</span><span>La última vez encontré <b>'+c.n+'</b> '+
+      'operación'+(c.n===1?'':'es')+' sin revisar.</span></div>':'')+
+    '<button class="nx-go" id="nxBndLeer">Revisar mis correos</button></div>';
+
+  if(bnd.fase==='cargando')
+   return cab+'<div class="nx-scroll"><div class="nx-empty">Leyendo tus correos del banco…</div></div>';
+
+  if(bnd.fase==='error')
+   return cab+'<div class="nx-scroll">'+
+    '<div class="nx-tip nxw"><span>⚠️</span><span>'+h(bnd.error)+'</span></div>'+
+    '<button class="nx-go" id="nxBndLeer">Intentar de nuevo</button>'+
+    '<button class="nx-go sec" data-go="p_nube" style="margin-top:9px">Ver la conexión</button></div>';
+
+  const gastos=bnd.items.filter(m=>m.tipo!=='Traslado');
+  const tras=bnd.items.filter(m=>m.tipo==='Traslado');
+  const fila=m=>{
+   const e=eleccionDe(m), cat=catById(e.catId);
+   const esTras=m.tipo==='Traslado';
+   return '<div class="nx-mail" data-k="'+h(m.id)+'">'+
+    '<div class="ln"><span class="b">'+(ICO_BANCO[m.banco]||'🏦')+' '+h(m.banco)+'</span>'+
+     '<b class="mo">'+fmt2(m.monto)+'</b></div>'+
+    '<div class="cp">'+h(m.concepto||'Movimiento')+'</div>'+
+    '<div class="fe">'+etiquetaFecha(m.fecha)+' · '+h(m.detalle||m.banco)+
+      (esTras?' · <b>traslado entre lo tuyo</b>':'')+'</div>'+
+    (esTras
+     ? '<div class="nt">Mover plata de un bolsillo a otro no es un gasto, así que esto '+
+       '<b>no cambia tus totales</b>. Descártalo cuando lo hayas visto.</div>'+
+       '<div class="bt"><button class="ok solo" data-ok="'+h(m.id)+'" hidden></button>'+
+       '<button class="no" data-no="'+h(m.id)+'">Visto, descartar</button></div>'
+     : '<div class="ch">'+
+        '<button class="chip" data-cat="'+h(m.id)+'">'+(cat?emoCat(cat)+' '+h(rotCat(cat)):'sin categoría')+' ›</button>'+
+        '<button class="chip" data-dst="'+h(m.id)+'">'+
+         (e.dest.tipo==='pagoCard'?'💸 Pago a '+h(e.dest.rot)
+          :e.dest.tipo==='card'?'💳 '+h(e.dest.rot):'🏦 '+h(e.dest.rot))+' ›</button>'+
+       '</div>'+
+       '<div class="bt"><button class="ok" data-ok="'+h(m.id)+'">Anotarlo</button>'+
+       '<button class="no" data-no="'+h(m.id)+'">Descartar</button></div>')+
+    '</div>';
+  };
+  return cab+'<div class="nx-scroll">'+
+   (bnd.items.length===0
+    ? '<div class="nx-empty">Nada nuevo en tus correos de los últimos '+bnd.dias+' días.</div>'
+    : '<div class="nx-tip"><span>👀</span><span>Revisa cada uno antes de anotarlo: la categoría y la '+
+      'cuenta vienen propuestas, tócalas para cambiarlas.</span></div>'+
+      (gastos.length?gastos.map(fila).join(''):'')+
+      (tras.length?'<div class="nx-st" style="margin-top:14px"><h3>Traslados</h3>'+
+        '<span style="font-size:12px;color:var(--nx-mut)">no son gastos</span></div>'+
+        tras.map(fila).join(''):''))+
+   '<button class="nx-go sec" id="nxBndLeer" style="margin-top:14px">Volver a leer los correos</button>'+
+   '<button class="nx-go sec" id="nxBndMas" style="margin-top:9px">Mirar 60 días atrás</button>'+
+   '</div>';
+ },wire(){
+  const leer=$('nxBndLeer');
+  if(leer) leer.onclick=()=>{ vib(8); pinta(0); traerBandeja().then(()=>pinta(0)); };
+  const mas=$('nxBndMas');
+  if(mas) mas.onclick=()=>{ vib(8); bnd.dias=60; pinta(0); traerBandeja().then(()=>pinta(0)); };
+
+  document.querySelectorAll('#nx-body [data-cat]').forEach(b=>b.onclick=()=>{
+   const m=bnd.items.find(x=>x.id===b.dataset.cat); if(!m) return;
+   vib(8);
+   hoja('¿En qué categoría lo pongo?',(S.categorias||[]).map(c=>({v:String(c.id),
+     n:c.nombre.split(' (')[0],s:c.bucket,e:emoCat(c)})),String(eleccionDe(m).catId||''),
+     v=>{ eleccionDe(m).catId=+v; pinta(0); });
+  });
+  document.querySelectorAll('#nx-body [data-dst]').forEach(b=>b.onclick=()=>{
+   const m=bnd.items.find(x=>x.id===b.dataset.dst); if(!m) return;
+   vib(8);
+   const ops=(S.cuentas||[]).map(a=>({v:'cta:'+a.id,n:a.nombre,e:'🏦',s:'sale de esta cuenta'}))
+    .concat((S.tarjetas||[]).map(c=>({v:'card:'+c.id,n:c.nombre,e:'💳',s:'consumo con la tarjeta'})))
+    .concat((S.tarjetas||[]).map(c=>({v:'pagoCard:'+c.id,n:'Pago a '+c.nombre,e:'💸',
+      s:'abona a la deuda de la tarjeta'})));
+   const e=eleccionDe(m);
+   hoja('¿De dónde salió?',ops,e.dest.tipo+':'+e.dest.id,v=>{
+    const p=v.split(':'), id=+p[1];
+    const rot=(p[0]==='cta'?(ctaById(id)||{}).nombre:((S.tarjetas||[]).find(x=>x.id===id)||{}).nombre)||'';
+    e.dest={tipo:p[0],id:id,rot:rot}; pinta(0);
+   });
+  });
+
+  document.querySelectorAll('#nx-body [data-ok]').forEach(b=>b.onclick=()=>{
+   const m=bnd.items.find(x=>x.id===b.dataset.ok); if(!m) return;
+   const e=eleccionDe(m), cat=catById(e.catId), mm=mesSel();
+   const dest=e.dest.tipo==='pagoCard'?'pago de '+e.dest.rot:e.dest.rot;
+   const r=simular(()=>anotarCorreo(m));
+   confirmar({titulo:'¿Anotar este movimiento?',boton:'Sí, anotar',
+     detalle:'<div><b>'+h(m.concepto||'Movimiento')+'</b> · '+fmt2(m.monto)+' el '+fechaCorta(m.fecha)+
+      '<br>'+(cat?'Categoría '+h(cat.nombre.split(' (')[0])+' · ':'')+h(dest)+'</div>'+
+      lineaCambio('Deuda total',r.deudaA,r.deudaB)+
+      lineaCambio('Disponible del mes',r.cajaA,r.cajaB)},()=>{
+    const antes=JSON.stringify(S);
+    vib(18);
+    anotarCorreo(m);
+    archivarCorreos([m.id]);
+    bnd.items=bnd.items.filter(x=>x.id!==m.id);
+    bndCache().n=bnd.items.length;
+    save(); pinta(0);
+    toast('Movimiento anotado',h(m.concepto||'')+' '+fmt2(m.monto),
+      ()=>{ S=JSON.parse(antes); persist(); renderAll();
+            bnd.items.unshift(m); pinta(0); toast('Se deshizo','',null); });
+   });
+  });
+  document.querySelectorAll('#nx-body [data-no]').forEach(b=>b.onclick=()=>{
+   const m=bnd.items.find(x=>x.id===b.dataset.no); if(!m) return;
+   vib(10);
+   archivarCorreos([m.id]);
+   bnd.items=bnd.items.filter(x=>x.id!==m.id);
+   bndCache().n=bnd.items.length;
+   try{ persist(); }catch(e){}
+   pinta(0);
+   toast('Descartado','No se anotó nada',()=>{
+    S.cfg.correosVistos=bndVistos().filter(x=>x!==m.id);
+    try{ persist(); }catch(e){}
+    bnd.items.unshift(m); pinta(0); toast('Vuelve a la bandeja','',null);
+   });
+  });
+ }};
+
  P.p_datos={html(){
   return barraTop('Copias y datos','Exportar, restaurar y reiniciar')+'<div class="nx-scroll">'+
    '<div class="nx-tip nxw"><span>⚠️</span><span>Si borras los datos del navegador, tus finanzas se van '+
@@ -1950,6 +2221,17 @@
   try{ save(); }catch(e){ console.warn('NEXO sueldo semilla',e); }
  }
 
+ /* Al abrir, y como máximo cada 6 horas, se le pregunta a la nube si hay
+    operaciones nuevas en los correos. Solo actualiza el contador del aviso:
+    nada se anota sin que él lo confirme en la bandeja. */
+ function revisarCorreosEnSilencio(){
+  let u=''; try{ u=getSyncUrl()||''; }catch(e){ u=''; }
+  if(!u) return;
+  const c=bndCache();
+  if(Date.now()-(+c.ts||0) < 6*3600*1000) return;
+  traerBandeja().then(()=>{ try{ if($('nx') && pila[pila.length-1]==='home') pinta(0); }catch(e){} });
+ }
+
  function montar(){
   if($('nx')) return;
   sembrarCierres(); sembrarSueldo();
@@ -1967,6 +2249,7 @@
   $('nx-fab').onclick=()=>go('reg');
   pila=[ localStorage.getItem(PIN_K) ? 'login' : 'home' ];
   pinta(1);
+  setTimeout(revisarCorreosEnSilencio,2500);
   if(nuevos.length) setTimeout(()=>toast(
     'Anoté tu sueldo',nuevos.map(f=>fmt2(montoQuincena(f.q))+' el '+fechaCorta(f.fecha)).join(' · '),null),900);
  }
