@@ -31,6 +31,9 @@
 /** Cuántos días atrás mirar por defecto. */
 const DIAS = 14;
 
+/** Tope de hilos que se leen de una vez. Más alto = más lento. */
+const MAX_HILOS = 80;
+
 /** Clave donde se recuerda qué operaciones ya resolviste, para que no
  *  vuelvan a aparecer nunca más. Vive en las propiedades del script. */
 const VISTOS_K = 'correosVistos';
@@ -55,12 +58,22 @@ function bandeja_(dias) {
   const d = Math.min(120, Math.max(1, dias || DIAS));
   const q = 'from:{' + REMITENTES.join(' ') + '} newer_than:' + d + 'd';
 
+  /* Caché de 5 minutos: leer el buzón tardaba ~30 s y la app parecía colgada.
+     Con esto, abrir la bandeja dos veces seguidas es instantáneo. */
+  const cache = CacheService.getScriptCache();
+  const clave = 'bandeja:' + d;
+  const guardado = cache.get(clave);
+  if (guardado) { try { return JSON.parse(guardado); } catch (e) {} }
+
   const vistos = leerVistos_();
   const out = [];
-  const hilos = GmailApp.search(q, 0, 200);
+  const hilos = GmailApp.search(q, 0, MAX_HILOS);
+  /* getMessagesForThreads trae los mensajes de TODOS los hilos en una sola
+     llamada; hacerlo hilo por hilo era lo que se comía los segundos. */
+  const porHilo = GmailApp.getMessagesForThreads(hilos);
 
-  hilos.forEach(function (h) {
-    h.getMessages().forEach(function (m) {
+  porHilo.forEach(function (msgs) {
+    msgs.forEach(function (m) {
       let mv;
       try { mv = interpretar_(m); } catch (e) { return; }
       if (!mv) return;
@@ -74,7 +87,16 @@ function bandeja_(dias) {
   const limpio = [];
   out.sort(function (a, b) { return b.fecha < a.fecha ? -1 : 1; });
   out.forEach(function (m) { if (!yaEsta[m.id]) { yaEsta[m.id] = 1; limpio.push(m); } });
+  try { cache.put(clave, JSON.stringify(limpio), 300); } catch (e) {}
   return limpio;
+}
+
+/** Se borra la caché al archivar, para que lo resuelto no reaparezca. */
+function olvidarCache_() {
+  try {
+    CacheService.getScriptCache().removeAll(
+      [7, 14, 30, 60, 90, 120].map(function (n) { return 'bandeja:' + n; }));
+  } catch (e) {}
 }
 
 /**
@@ -221,6 +243,7 @@ function archivarCorreos_(ids) {
     const hoy = new Date().toISOString().slice(0, 10);
     ids.forEach(function (id) { if (id) v[id] = hoy; });
     guardarVistos_(v);
+    olvidarCache_();
     return jsonCorreos_({ ok: true, archivados: ids.length });
   } finally { lock.releaseLock(); }
 }
