@@ -1764,11 +1764,27 @@
  const bndVistos=()=>{ S.cfg.correosVistos=S.cfg.correosVistos||[]; return S.cfg.correosVistos; };
  const bndCache=()=>{ S.cfg.correosCache=S.cfg.correosCache||{ts:0,n:0}; return S.cfg.correosCache; };
 
+ let bndT0=0, bndTimer=null;
+ /* La primera lectura del buzón puede tardar ~30 s. Sin señales de vida la
+    pantalla parecía colgada, así que se muestran los segundos y hay un tope. */
+ function contadorOn(){
+  bndT0=Date.now(); clearInterval(bndTimer);
+  bndTimer=setInterval(()=>{
+   const el=$('nxBndSeg');
+   if(!el){ clearInterval(bndTimer); return; }
+   el.textContent=Math.round((Date.now()-bndT0)/1000)+' s';
+  },500);
+ }
+ const contadorOff=()=>clearInterval(bndTimer);
+
  function traerBandeja(){
   const u=urlBandeja(bnd.dias);
   if(!u){ bnd={fase:'sinurl',items:[],error:'',dias:bnd.dias}; return Promise.resolve(); }
   bnd.fase='cargando'; bnd.error='';
-  return fetch(u).then(r=>r.text()).then(txt=>{
+  const corta=new AbortController();
+  const tope=setTimeout(()=>corta.abort(),90000);
+  return fetch(u,{signal:corta.signal}).then(r=>r.text()).then(txt=>{
+   clearTimeout(tope);
    let d; try{ d=JSON.parse(txt); }catch(e){
     throw new Error(/accounts\.google|sign ?in|iniciar sesi|<html/i.test(txt)
       ? 'La nube pidió iniciar sesión. Vuelve a publicar el script con acceso "Cualquier persona".'
@@ -1786,7 +1802,14 @@
    bnd.fase='listo';
    const c=bndCache(); c.ts=Date.now(); c.n=bnd.items.length;
    try{ persist(); }catch(e){}
-  }).catch(e=>{ bnd.fase='error'; bnd.error=e.message||String(e); });
+  }).catch(e=>{
+   clearTimeout(tope);
+   bnd.fase='error';
+   bnd.error = (e && e.name==='AbortError')
+    ? 'Tu script tardó más de 90 segundos y corté la espera. Vuelve a intentar: '+
+      'la segunda vez suele ser instantánea porque la nube guarda el resultado 5 minutos.'
+    : (e.message||String(e));
+  }).finally(()=>contadorOff());
  }
 
  /* ---- de qué cuenta o tarjeta salió ---- */
@@ -1913,7 +1936,12 @@
     '<button class="nx-go" id="nxBndLeer">Revisar mis correos</button></div>';
 
   if(bnd.fase==='cargando')
-   return cab+'<div class="nx-scroll"><div class="nx-empty">Leyendo tus correos del banco…</div></div>';
+   return cab+'<div class="nx-scroll">'+
+    '<div class="nx-cargando"><div class="giro"></div>'+
+     '<b>Leyendo tus correos del banco…</b>'+
+     '<span>Va por <b id="nxBndSeg">0 s</b>. La primera vez puede tardar hasta medio minuto '+
+     'porque Google recorre tu buzón; después queda guardado 5 minutos y es instantáneo.</span>'+
+    '</div></div>';
 
   if(bnd.fase==='error')
    return cab+'<div class="nx-scroll">'+
@@ -1964,10 +1992,11 @@
    '<button class="nx-go sec" id="nxBndMas" style="margin-top:9px">Mirar 60 días atrás</button>'+
    '</div>';
  },wire(){
+  if(bnd.fase==='cargando') contadorOn();
   const leer=$('nxBndLeer');
-  if(leer) leer.onclick=()=>{ vib(8); pinta(0); traerBandeja().then(()=>pinta(0)); };
+  if(leer) leer.onclick=()=>{ vib(8); const q=traerBandeja(); pinta(0); q.then(()=>pinta(0)); };
   const mas=$('nxBndMas');
-  if(mas) mas.onclick=()=>{ vib(8); bnd.dias=60; pinta(0); traerBandeja().then(()=>pinta(0)); };
+  if(mas) mas.onclick=()=>{ vib(8); bnd.dias=60; const q=traerBandeja(); pinta(0); q.then(()=>pinta(0)); };
 
   document.querySelectorAll('#nx-body [data-cat]').forEach(b=>b.onclick=()=>{
    const m=bnd.items.find(x=>x.id===b.dataset.cat); if(!m) return;
