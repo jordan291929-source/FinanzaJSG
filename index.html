@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="fonts/inter.css">
-<link rel="stylesheet" href="nx.css?v=402">
+<link rel="stylesheet" href="nx.css?v=440">
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
@@ -1037,57 +1037,94 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='4.0.2'; // se actualiza con cada mejora del sistema
+const APP_VERSION='4.4.0'; // se actualiza con cada mejora del sistema
 
+/* Los datos reales de Jordan al 17-ago-2026, tomados de su propia copia
+   exportada (Perfil → Copias y datos). Esto es lo que se restaura si algún
+   día toca "Reiniciar todo" o "Cargar mis datos del plan". */
 function defaults(){return {
- cfg:{titular:'Jordan',bruto:3500,aporte:0.10,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:0,saldoIni:0},
+ cfg:{titular:'Jordan SG',bruto:3500,aporte:0.1,comision:0.0155,seguro:0.0135,otros:48.5,otrosIngresos:600,saldoIni:26742.15,
+   /* le pagan quincenal: 1,484.97 el 15 y 1,484.97 el último día del mes, corrido
+      al día útil anterior si cae fin de semana o feriado (lo maneja nx.js) */
+   sueldo:{on:true,q1:1484.97,q2:1484.97,cuentaId:3,desde:'2026-08-18'}},
  categorias:[
-  {id:1,nombre:'Alimentación',bucket:'Necesidad',limite:650},
-  {id:2,nombre:'Transporte',bucket:'Necesidad',limite:150},
-  {id:3,nombre:'Servicios (luz, agua, internet, cel)',bucket:'Necesidad',limite:75},
-  {id:4,nombre:'Vivienda / Alquiler',bucket:'Necesidad',limite:0},
-  {id:5,nombre:'Salud',bucket:'Necesidad',limite:0},
-  {id:7,nombre:'Pago de deudas',bucket:'Deuda',limite:0,auto:'deuda'},
-  {id:6,nombre:'Gym / Deporte',bucket:'Gusto',limite:90},
-  {id:8,nombre:'Restaurantes / Salidas',bucket:'Gusto',limite:80},
-  {id:9,nombre:'Entretenimiento',bucket:'Gusto',limite:0},
-  {id:10,nombre:'Ropa',bucket:'Gusto',limite:0},
-  {id:11,nombre:'Otros',bucket:'Gusto',limite:0},
-  {id:12,nombre:'Ahorro / Fondo',bucket:'Ahorro',limite:100},
-  {id:13,nombre:'Aporte a metas',bucket:'Ahorro',limite:0}
+   {id:1,nombre:'Alimentación',bucket:'Necesidad',limite:750,sugerencias:['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café']},
+   {id:2,nombre:'Transporte',bucket:'Necesidad',limite:150,sugerencias:['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje']},
+   {id:3,nombre:'Servicios (luz, agua, internet, cel)',bucket:'Necesidad',limite:175,sugerencias:[]},
+   {id:4,nombre:'Vivienda / Alquiler',bucket:'Necesidad',limite:600,sugerencias:['Alquiler','Mantenimiento','Arbitrios']},
+   {id:5,nombre:'Salud',bucket:'Necesidad',limite:0,sugerencias:[]},
+   {id:7,nombre:'Pago de deudas',bucket:'Deuda',limite:0,auto:'deuda',sugerencias:['Pago tarjeta','Pago préstamo','Cuota']},
+   {id:6,nombre:'Gym / Deporte',bucket:'Gusto',limite:41.9,sugerencias:['Gym','Mensualidad gym','Deporte']},
+   {id:8,nombre:'Restaurantes / Salidas',bucket:'Gusto',limite:0,sugerencias:['Restaurante','Cena','Bar','Café','Delivery']},
+   {id:9,nombre:'Entretenimiento',bucket:'Gusto',limite:0,sugerencias:['Cine','Netflix','Spotify','Streaming','Salida','Juegos']},
+   {id:10,nombre:'Ropa',bucket:'Gusto',limite:200,sugerencias:['Ropa','Zapatos','Accesorios']},
+   {id:11,nombre:'Otros',bucket:'Gusto',limite:200,sugerencias:['Otros','Regalo','Imprevisto']},
+   {id:12,nombre:'Ahorro / Fondo',bucket:'Ahorro',limite:100,sugerencias:['Ahorro','Fondo de emergencia']},
+   {id:13,nombre:'Aporte a metas',bucket:'Ahorro',limite:0,sugerencias:['Aporte meta']}
  ],
- tx:[],
+ tx:[
+   {id:1787002906933,fecha:'2026-08-17',tipo:'Gasto',catId:2,cuentaId:2,concepto:'Pasaje',monto:16.9},
+   {id:9003,fecha:'2026-08-15',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota Ripley',monto:210,payLoanId:201},
+   {id:9013,fecha:'2026-08-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9014,fecha:'2026-08-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP #1 ago-26',monto:447.95,payLoanId:204},
+   {id:9002,fecha:'2026-07-15',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota Ripley',monto:210,payLoanId:201},
+   {id:9012,fecha:'2026-07-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9001,fecha:'2026-06-15',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota Ripley',monto:210,payLoanId:201},
+   {id:9011,fecha:'2026-06-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9010,fecha:'2026-05-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9009,fecha:'2026-04-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9008,fecha:'2026-03-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9007,fecha:'2026-02-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9006,fecha:'2026-01-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9005,fecha:'2025-12-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202},
+   {id:9004,fecha:'2025-11-05',tipo:'Gasto',catId:7,cuentaId:3,concepto:'Cuota BCP nov-25',monto:266.42,payLoanId:202}
+ ],
  tarjetas:[
-  {id:101,nombre:'Tarjeta BCP',linea:5000,dia:15,pagoMin:0,compras:[
-    {id:1011,desc:'Saldo ago-2026',saldo:4060,n:12,tea:0.90,startY:2026,startM:9}]},
-  {id:102,nombre:'Tarjeta Interbank',linea:2000,dia:20,pagoMin:0,compras:[
-    {id:1021,desc:'Saldo ago-2026',saldo:1500,n:12,tea:0.90,startY:2026,startM:9}]}
+   {id:101,nombre:'Tarjeta BCP',linea:10700,dia:20,cierre:25,pagoMin:0,compras:[
+   {id:1101,desc:'Coolbox',saldo:633.15,n:1,tea:0,startY:2026,startM:9},
+   {id:1102,desc:'Mercadolibre',saldo:126.34,n:2,tea:0,startY:2026,startM:9},
+   {id:1103,desc:'Izquierdoshop',saldo:179.74,n:2,tea:0,startY:2026,startM:9},
+   {id:1104,desc:'Nike',saldo:499.92,n:5,tea:0,startY:2026,startM:9},
+   {id:1105,desc:'Kiosko Chimbote',saldo:2428.25,n:11,tea:0,startY:2026,startM:9},
+   {id:1106,desc:'Consumo sin cuotas (Microsoft 365, Mass, Saga, Coolbox)',saldo:947.08,n:1,tea:0,startY:2026,startM:9}
+ ]},
+   {id:102,nombre:'Tarjeta Interbank',linea:3700,dia:20,cierre:31,pagoMin:0,compras:[
+   {id:1021,desc:'Pago setiembre',saldo:1500,n:1,tea:0,startY:2026,startM:9},
+   {id:1022,desc:'Pago octubre',saldo:500,n:1,tea:0,startY:2026,startM:10},
+   {id:1023,desc:'Pago noviembre',saldo:500,n:1,tea:0,startY:2026,startM:11},
+   {id:1024,desc:'Pago diciembre',saldo:500,n:1,tea:0,startY:2026,startM:12}
+ ]}
  ],
  loans:[
-  {id:201,nombre:'Ripley',monto:551,cuota:210.00,meses:3,dia:15,startY:2026,startM:9},
-  {id:202,nombre:'BCP nov-25',monto:2327,cuota:266.42,meses:14,dia:5,startY:2026,startM:9},
-  {id:203,nombre:'Línea BCP',monto:2935,cuota:260.00,meses:15,dia:5,startY:2026,startM:9},
-  {id:204,nombre:'BCP #1 ago-26',monto:11734,cuota:447.95,meses:59,dia:5,startY:2026,startM:9},
-  {id:205,nombre:'BCP #2 oct-26',monto:14550,cuota:534.18,meses:60,dia:5,startY:2026,startM:10},
-  {id:206,nombre:'Huancayo set-26',monto:20000,cuota:1118.00,meses:24,dia:5,startY:2026,startM:9}
+   {id:201,nombre:'Ripley',monto:1000,cuota:210,meses:6,dia:15,startY:2026,startM:6},
+   {id:202,nombre:'BCP nov-25',monto:4500,cuota:266.42,meses:24,dia:5,startY:2025,startM:11},
+   {id:204,nombre:'BCP #1 ago-26',monto:11800,cuota:447.95,meses:60,dia:5,startY:2026,startM:8},
+   {id:205,nombre:'BCP #2 oct-26',monto:14550,cuota:534.18,meses:60,dia:5,startY:2026,startM:10},
+   {id:206,nombre:'Huancayo',monto:20000,cuota:1118,meses:24,dia:5,startY:2026,startM:9}
  ],
  metas:[
-  {id:301,nombre:'Fondo de emergencia mínimo',objetivo:1000,ahorrado:0,fecha:'2026-12-31'},
-  {id:302,nombre:'Fondo de 3 meses',objetivo:3000,ahorrado:0,fecha:'2027-12-31'},
-  {id:303,nombre:'Capital propio · negocio de ropa',objetivo:2000,ahorrado:0,fecha:'2027-06-30'}
+   {id:301,nombre:'Fondo de emergencia mínimo',objetivo:1000,ahorrado:0,fecha:'2026-12-31'},
+   {id:302,nombre:'Fondo de 3 meses',objetivo:3000,ahorrado:0,fecha:'2027-12-31'},
+   {id:303,nombre:'Capital propio · negocio de ropa',objetivo:2000,ahorrado:0,fecha:'2027-06-30'}
  ],
- estrategia:'avalancha', extra:150,
- cuentas:[{id:1,nombre:'Efectivo'},{id:2,nombre:'Yape / Plin'},{id:3,nombre:'Cuenta bancaria'},{id:4,nombre:'Débito'}],
+ estrategia:'avalancha',
+ extra:150,
+ cuentas:[
+   {id:1,nombre:'Efectivo'},
+   {id:2,nombre:'Yape / Plin'},
+   {id:3,nombre:'Cuenta bancaria'},
+   {id:4,nombre:'Débito'}
+ ],
  recurrentes:[
-  {id:401,concepto:'Gym',catId:6,monto:90,dia:3,cuentaId:3,lastGen:''},
-  {id:402,concepto:'Plan Movistar',catId:3,monto:60,dia:5,cuentaId:3,lastGen:''},
-  {id:403,concepto:'iCloud',catId:3,monto:15,dia:10,cuentaId:3,lastGen:''}
+   {id:401,concepto:'Plan Movistar',catId:3,monto:80,dia:5,cuentaId:3,lastGen:'2026-08'},
+   {id:403,concepto:'iCloud',catId:3,monto:45,dia:10,cuentaId:3,lastGen:'2026-08'},
+   {id:404,concepto:'SmartFit',catId:6,monto:41.9,dia:31,cuentaId:3,lastGen:'2026-08'}
  ],
  favoritos:[
-  {id:1,concepto:'Almuerzo menú',catId:1,monto:12,cuentaId:1},
-  {id:2,concepto:'Pasaje',catId:2,monto:2.5,cuentaId:1},
-  {id:3,concepto:'Mercado',catId:1,monto:60,cuentaId:1},
-  {id:4,concepto:'Delivery',catId:8,monto:25,cuentaId:2}
+   {id:1,concepto:'Almuerzo menú',catId:1,monto:12,cuentaId:1},
+   {id:2,concepto:'Pasaje',catId:2,monto:2.5,cuentaId:1},
+   {id:3,concepto:'Mercado',catId:1,monto:60,cuentaId:1},
+   {id:4,concepto:'Delivery',catId:8,monto:25,cuentaId:2}
  ]
 };}
 function migrate(s){const b=defaults();for(const k in b)if(s[k]===undefined)s[k]=b[k];for(const k in b.cfg)if(s.cfg[k]===undefined)s.cfg[k]=b.cfg[k];if(!s.cfg.titular)s.cfg.titular=b.cfg.titular;
@@ -3079,6 +3116,6 @@ addEventListener('load',()=>{
  try{ pintarTodo(); }catch(e){ console.warn('v3.6.0:',e); }
 })();
 </script>
-<script src="nx.js?v=402"></script>
+<script src="nx.js?v=440"></script>
 </body>
 </html>

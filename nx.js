@@ -22,7 +22,7 @@
  const pad2=n=>('0'+n).slice(-2);
 
  /* -------- emoji por categoría (decoración; nunca cambia un número) -------- */
- const EMO=[[/aliment|comida|mercado|restaur|delivery/i,'🍔'],[/transp|pasaje|taxi|gasolin|combust/i,'🚌'],
+ const EMO=[[/restaur|salida|cena|bar\b/i,'🍽️'],[/aliment|comida|mercado|delivery/i,'🍔'],[/transp|pasaje|taxi|gasolin|combust/i,'🚌'],
   [/vivien|alquil|renta|casa|hogar/i,'🏠'],[/servici|luz|agua|internet|cel|tele/i,'💡'],
   [/salud|farmac|medic|clinic|doctor/i,'💊'],[/entreten|cine|juego|streaming|ocio/i,'🎬'],
   [/compra|ropa|zapat|tienda/i,'🛍️'],[/educ|curso|libro|estudi/i,'📚'],
@@ -30,6 +30,14 @@
   [/sueldo|salario|ingreso|grati|freelance|bono/i,'💰'],[/gym|deporte|fitness/i,'🏋️'],
   [/mascota|veterin/i,'🐾'],[/regalo|cumple/i,'🎁'],[/viaje|hotel|vuelo|cusco/i,'✈️']];
  const emo=t=>{ for(const [re,e] of EMO) if(re.test(t||'')) return e; return '💸'; };
+ /* Si él le puso un icono a la categoría, manda el suyo; si no, se adivina. */
+ const emoCat=c=>(c&&c.icono)?c.icono:emo(c?c.nombre:'');
+ /* Nombre corto para las rejillas: "Servicios (luz, agua...)" → "Servicios" */
+ const rotCat=c=>{ const t=String((c&&c.nombre)||'').split(' (')[0].split(' / ')[0].trim();
+   if(t.length<=13) return t;
+   if(t.indexOf(' ')>0) return t;        // si tiene espacios, se parte en dos líneas
+   return t.slice(0,12)+'.';             // una palabra larguísima sí se recorta
+ };
 
  /* ============================ helpers de fecha ============================ */
  function hoy(){ const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
@@ -80,7 +88,7 @@
   const nav=$('nx-nav'), fab=$('nx-fab');
   const esRaiz=RAIZ.indexOf(k)>=0;
   nav.style.display = (esRaiz||pant.nav) ? 'flex':'none';
-  fab.style.display = (k==='home'||k==='mov') ? 'grid':'none';
+  fab.style.display = (k==='mov') ? 'grid':'none';   /* pedido suyo: el + vive en Movimientos */
   nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
   cuerpo.querySelectorAll('[data-go]').forEach(e=>{
    e.onclick=ev=>{ ev.stopPropagation();
@@ -109,6 +117,52 @@
   bg.classList.add('on'); sh.classList.add('on');
  }
 
+ /* ============ confirmar antes de borrar, y deshacer al editar ============
+    Pedido suyo. Nada de esto cambia un cálculo: sólo intercepta las funciones
+    del motor para avisar antes, y guarda una copia del estado para revertir. */
+
+ /* mide el efecto real de una acción sin dejar rastro: aplica, mide, revierte */
+ function simular(mut){
+  const copia=JSON.stringify(S), m=mesSel();
+  const r={deudaA:deudaTotal(), cajaA:saldoHasta(m.y,m.mn)};
+  try{ mut(); r.deudaB=deudaTotal(); r.cajaB=saldoHasta(m.y,m.mn); }
+  catch(e){ r.deudaB=r.deudaA; r.cajaB=r.cajaA; }
+  finally{ S=JSON.parse(copia); }
+  return r;
+ }
+ function lineaCambio(rot,a,b){
+  if(Math.abs(a-b)<0.5) return '';
+  return '<div class="cifras"><span class="fl">'+rot+'</span>'+
+   '<span class="a">'+fmt(a)+'</span><span class="fl">→</span><span class="b">'+fmt(b)+'</span></div>';
+ }
+
+ function confirmar(o,alAceptar){
+  const bg=$('nx-bg'), sh=$('nx-sheet');
+  if(!bg||!sh){ if(window.confirm(o.titulo)) alAceptar(); return; }
+  sh.innerHTML='<div class="grab"></div><h4>'+h(o.titulo)+'</h4>'+
+   '<div class="conf">'+o.detalle+'</div>'+
+   '<div class="cbtns"><button class="nx-go mal" id="nxSi">'+h(o.boton||'Sí, borrar')+'</button>'+
+   '<button class="nx-go sec" id="nxNo">Cancelar</button></div>';
+  const cerrar=()=>{ bg.classList.remove('on'); sh.classList.remove('on'); };
+  $('nxSi').onclick=()=>{ vib(18); cerrar(); alAceptar(); };
+  $('nxNo').onclick=()=>{ vib(8); cerrar(); };
+  bg.onclick=cerrar;
+  bg.classList.add('on'); sh.classList.add('on');
+ }
+
+ /* ---- aviso con "Deshacer" para los cambios de un campo ---- */
+ let tst=null, tstT=null, copiaPrevia=null;
+ function toast(titulo,detalle,alDeshacer){
+  if(!tst){ tst=document.createElement('div'); tst.id='nx-toast'; document.body.appendChild(tst); }
+  tst.innerHTML='<div class="tt"><b>'+h(titulo)+'</b>'+(detalle?h(detalle):'')+'</div>'+
+   (alDeshacer?'<button id="nxUndo">Deshacer</button>':'');
+  const u=$('nxUndo');
+  if(u) u.onclick=()=>{ vib(16); clearTimeout(tstT); tst.classList.remove('on'); alDeshacer(); };
+  clearTimeout(tstT);
+  requestAnimationFrame(()=>tst.classList.add('on'));
+  tstT=setTimeout(()=>tst.classList.remove('on'),7000);
+ }
+
  function barraTop(titulo,sub,derecha){
   return '<div class="nx-top"><button class="bk" data-back aria-label="Volver">‹</button>'+
    '<div class="tt"><h2>'+h(titulo)+'</h2>'+(sub?'<span>'+h(sub)+'</span>':'')+'</div>'+
@@ -131,7 +185,7 @@
   const medio=t.cardId?((S.tarjetas.find(x=>x.id===t.cardId)||{}).nombre||'Tarjeta')
             :((ctaById(t.cuentaId)||{}).nombre||'');
   return '<button class="nx-row" data-go="txd" data-id="'+t.id+'">'+
-   '<span class="av">'+emo(cat+' '+(t.concepto||''))+'</span>'+
+   '<span class="av">'+(c&&c.icono?c.icono:emo(cat+' '+(t.concepto||'')))+'</span>'+
    '<span class="tx"><b>'+h(t.concepto||'—')+'</b><span>'+h(cat)+' · '+etiquetaFecha(t.fecha)+'</span></span>'+
    '<span class="am"><b class="'+(ing?'nx-in':'nx-out')+'">'+(ing?'+ ':'− ')+fmt2(t.monto)+'</b>'+
    (medio?'<span>'+h(medio)+'</span>':'')+'</span></button>';
@@ -142,14 +196,24 @@
   const m=mesSel(), out=[], hy=hoy();
   for(let k=0;k<3;k++){
    let y=m.y, mn=m.mn+k; while(mn>12){ mn-=12; y++; }
-   const meter=(nombre,dia,st,ico,tipo,id)=>{
-    if(!dia||!(st.cuota>0)) return;
-    const f=new Date(y,mn-1,Math.min(+dia,diasDeMes(y,mn)));
+   const meter=(nombre,fecha,st,ico,tipo,id,exacto,nota)=>{
+    if(!fecha||!(st.cuota>0)) return;
+    const f=(fecha instanceof Date)?fecha:new Date(fecha+'T00:00');
     out.push({nombre,fecha:f,dias:Math.round((f-hy)/86400000),cuota:st.cuota,
-              falta:st.falta,ico,tipo,id,k});
+              falta:st.falta,ico,tipo,id,k,exacto:exacto!==false,nota:nota||''});
    };
-   (S.tarjetas||[]).forEach(c=>meter(c.nombre,c.dia,cardMonthStatus(c,y,mn),'💳','tarjeta',c.id));
-   (S.loans||[]).forEach(l=>meter(l.nombre,l.dia,loanMonthStatus(l,y,mn),'📄','deuda',l.id));
+   /* Las tarjetas se pagan en la fecha que fija el cronograma del banco, que
+      suele caer el MES SIGUIENTE al cierre. Los préstamos sí van a su día. */
+   (S.tarjetas||[]).forEach(c=>{
+    const fp=fechaPagoCiclo(c,y,mn);
+    meter(c.nombre,fp.fecha,cardMonthStatus(c,y,mn),'💳','tarjeta',c.id,fp.exacto,
+          fp.fin?'facturación al '+fechaCorta(fp.fin):'');
+   });
+   (S.loans||[]).forEach(l=>{
+    if(!l.dia) return;
+    meter(l.nombre,new Date(y,mn-1,Math.min(+l.dia,diasDeMes(y,mn))),
+          loanMonthStatus(l,y,mn),'📄','deuda',l.id,true,'');
+   });
   }
   return out.sort((a,b)=>a.fecha-b.fecha);
  }
@@ -164,7 +228,8 @@
   const r=rotDias(v);
   return '<button class="nx-row" data-go="'+v.tipo+'" data-id="'+v.id+'">'+
    '<span class="av">'+v.ico+'</span>'+
-   '<span class="tx"><b>'+h(v.nombre)+'</b><span>'+v.fecha.getDate()+' '+MESab[v.fecha.getMonth()]+' · '+r.t+'</span></span>'+
+   '<span class="tx"><b>'+h(v.nombre)+'</b><span>'+v.fecha.getDate()+' '+MESab[v.fecha.getMonth()]+
+     ' · '+r.t+(v.nota?' · '+v.nota:'')+(v.exacto?'':' (aprox.)')+'</span></span>'+
    '<span class="am"><b>'+fmt(v.cuota)+'</b>'+(v.falta>0.5&&v.falta<v.cuota-0.5?'<span>falta '+fmt(v.falta)+'</span>':'')+'</span></button>';
  }
 
@@ -197,6 +262,23 @@
     t:h(c.nombre)+' al '+Math.round(us/li*100)+'% de su línea',
     s:'Te queda '+fmt(Math.max(0,li-us))+' de '+fmt(li)+'.',a:{r:'Ver tarjeta →',k:'tarjetas'}});
   });
+  const huer=recurrentesHuerfanos();
+  if(huer.length){
+   const sumaH=huer.reduce((x,r)=>x+(+r.monto||0),0);
+   av.push({n:'alto',i:'\uD83E\uDDFE',
+    t:'Faltan '+huer.length+' cargo'+(huer.length===1?'':'s')+' fijo'+(huer.length===1?'':'s')+' de '+MES[mn-1]+': '+fmt(sumaH),
+    s:huer.map(r=>r.concepto).join(', ')+'. La app los dio por registrados pero no est\u00e1n.',
+    a:{r:'Revisar y registrar \u2192',k:'huerfanos'}});
+  }
+  const ps=proximoSueldo();
+  if(ps){
+   const dd=Math.round((new Date(ps.fecha+'T00:00')-hoy())/86400000);
+   if(dd<=4) av.push({n:'bueno',i:'💰',
+    t:(dd===0?'Hoy entra tu sueldo: ':dd===1?'Mañana entra tu sueldo: ':'Tu sueldo entra en '+dd+' días: ')+
+      fmt2(montoQuincena(ps.q)),
+    s:fechaCorta(ps.fecha)+' · '+ps.rot+(ps.motivo?' (el '+(+ps.nominal.split('-')[2])+' cae '+ps.motivo+')':'')+
+      '. Se anota solo.',a:{r:'Ver mi sueldo →',k:'p_sueldo'}});
+  }
   const ult=(S.tx||[]).map(t=>t.fecha).sort().pop();
   if(ult){ const d=Math.round((hoy()-new Date(ult+'T00:00'))/86400000);
    if(d>=4) av.push({n:'medio',i:'📝',t:'Llevas '+d+' días sin anotar un movimiento',
@@ -213,25 +295,97 @@
  }
 
  /* ============================ ciclo de tarjeta ============================
-    OJO — ESTIMACIÓN DECLARADA: el motor guarda día de pago y compras en
-    cuotas, pero no día de cierre. Se asume cierre = vencimiento − 10 días,
-    y la pantalla lo dice con una etiqueta. Cuando Jordan confirme los datos
-    reales del banco, sólo hay que cambiar CIERRE_ANTES o guardarlo por tarjeta. */
+    El cronograma oficial del BCP (variante "cierre de facturación 25") que
+    Jordan pasó. Cada fila: mes de facturación → [inicio, cierre, fecha de pago].
+    OJO con lo que revela: el pago NO es "el 20 de cada mes". Los consumos del
+    25-jul al 25-ago se pagan el 22-set, y el día varía entre 20 y 23 porque el
+    banco lo corre al siguiente día útil. */
+ const CRONO={
+  '25:2026':[
+   ['2025-12-25','2026-01-23','2026-02-23'],
+   ['2026-01-24','2026-02-25','2026-03-23'],
+   ['2026-02-26','2026-03-25','2026-04-21'],
+   ['2026-03-26','2026-04-24','2026-05-20'],
+   ['2026-04-25','2026-05-25','2026-06-22'],
+   ['2026-05-26','2026-06-25','2026-07-21'],
+   ['2026-06-26','2026-07-24','2026-08-20'],
+   ['2026-07-25','2026-08-25','2026-09-22'],
+   ['2026-08-26','2026-09-25','2026-10-20'],
+   ['2026-09-26','2026-10-23','2026-11-23'],
+   ['2026-10-24','2026-11-25','2026-12-22'],
+   ['2026-11-26','2026-12-24','2027-01-20']
+  ],
+  /* Interbank (IBK Visa Access): reconstruido de sus 13 estados de cuenta reales
+     del correo. El patrón es limpio: el ciclo es el MES CALENDARIO completo y el
+     pago cae el 20 del mes siguiente, corrido al lunes si el 20 es sábado o
+     domingo. Los 7 estados de 2026 (20 feb, 20 mar, 20 abr, 20 may, 22 jun,
+     20 jul, 20 ago) coinciden con esta tabla uno por uno. */
+  '31:2026':[
+   ['2026-01-01','2026-01-31','2026-02-20'],
+   ['2026-02-01','2026-02-28','2026-03-20'],
+   ['2026-03-01','2026-03-31','2026-04-20'],
+   ['2026-04-01','2026-04-30','2026-05-20'],
+   ['2026-05-01','2026-05-31','2026-06-22'],
+   ['2026-06-01','2026-06-30','2026-07-20'],
+   ['2026-07-01','2026-07-31','2026-08-20'],
+   ['2026-08-01','2026-08-31','2026-09-21'],
+   ['2026-09-01','2026-09-30','2026-10-20'],
+   ['2026-10-01','2026-10-31','2026-11-20'],
+   ['2026-11-01','2026-11-30','2026-12-21'],
+   ['2026-12-01','2026-12-31','2027-01-20']
+  ]
+ };
+ /** Cómo se llama cada cierre en la interfaz. */
+ const nombreCierre=d=>(+d===31?'Cierre fin de mes':'Cierre día '+d);
+ /** ¿Hay cronograma cargado para esta tarjeta en este año? */
+ const hayCrono=(c,y)=>!!CRONO[(+c.cierre||0)+':'+y];
+ /** Fila exacta del cronograma para una tarjeta y un mes de facturación (cierre), o null. */
+ function filaCrono(c,y,mn){
+  const t=CRONO[(+c.cierre||0)+':'+y];
+  return (t && t[mn-1]) ? {ini:t[mn-1][0], fin:t[mn-1][1], pago:t[mn-1][2], exacto:true} : null;
+ }
+ /* IMPORTANTE: el motor indexa las cuotas por el mes en que SE PAGAN
+    (compra.startM = mes de la primera cuota). Así que para casar una fila del
+    cronograma con la cuota de un mes hay que buscar por FECHA DE PAGO, no por
+    mes de cierre: la cuota de setiembre corresponde al ciclo 25-jul → 25-ago. */
+ function filaPago(c,y,mn){
+  const pre=y+'-'+pad2(mn);
+  for(const yy of [y,y-1]){
+   const t=CRONO[(+c.cierre||0)+':'+yy];
+   if(!t) continue;
+   const f=t.find(r=>r[2].indexOf(pre)===0);
+   if(f) return {ini:f[0], fin:f[1], pago:f[2], exacto:true};
+  }
+  return null;
+ }
+ /** Cuándo se paga la cuota de ese mes. Exacto si hay cronograma. */
+ function fechaPagoCiclo(c,y,mn){
+  const f=filaPago(c,y,mn);
+  if(f) return {fecha:f.pago, exacto:true, fin:f.fin};
+  const d=Math.min(+c.dia||20, diasDeMes(y,mn));
+  return {fecha:y+'-'+pad2(mn)+'-'+pad2(d), exacto:false, fin:''};
+ }
+
  const CIERRE_ANTES=10;
  function ciclo(c,y,mn){
-  const venc=Math.min(+c.dia||20, diasDeMes(y,mn));
-  const fVenc=new Date(y,mn-1,venc);
-  const fCierre=new Date(y,mn-1,venc); fCierre.setDate(fCierre.getDate()-CIERRE_ANTES);
-  const fIni=new Date(fCierre); fIni.setMonth(fIni.getMonth()-1); fIni.setDate(fIni.getDate()+1);
+  const f=filaPago(c,y,mn);
   const k=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
-  const ini=k(fIni), fin=k(fCierre);
+  let ini,fin,vencS,exacto=false;
+  if(f){ ini=f.ini; fin=f.fin; vencS=f.pago; exacto=true; }
+  else {
+   const venc=Math.min(+c.dia||20, diasDeMes(y,mn));
+   const fVenc=new Date(y,mn-1,venc);
+   const fCierre=new Date(y,mn-1,venc); fCierre.setDate(fCierre.getDate()-CIERRE_ANTES);
+   const fIni=new Date(fCierre); fIni.setMonth(fIni.getMonth()-1); fIni.setDate(fIni.getDate()+1);
+   ini=k(fIni); fin=k(fCierre); vencS=k(fVenc);
+  }
   const enCiclo=t=>t.fecha>=ini&&t.fecha<=fin;
   const consumos=(S.tx||[]).filter(t=>t.cardId===c.id&&enCiclo(t));
   const abonos=(S.tx||[]).filter(t=>t.payCardId===c.id&&enCiclo(t));
   const st=cardMonthStatus(c,y,mn);
   const antes=(S.tx||[]).filter(t=>t.cardId===c.id&&t.fecha<ini).reduce((a,t)=>a+(+t.monto||0),0)
             -(S.tx||[]).filter(t=>t.payCardId===c.id&&t.fecha<ini).reduce((a,t)=>a+(+t.monto||0),0);
-  return {ini,fin,venc:k(fVenc),
+  return {ini,fin,venc:vencS,exacto:exacto,
    facturado:st.cuota, pagado:st.cov, falta:st.falta,
    consumos, abonos,
    sumaCons:consumos.reduce((a,t)=>a+(+t.monto||0),0),
@@ -303,20 +457,15 @@
   const d=new Date();
   const ing=ingresoRealMes(y,mn), gas=gastoMes(y,mn);
   const metaYa=(S.metas||[]).reduce((a,g)=>a+(+g.ahorrado||0),0);
+  const m2=mesSel();
   const prods=(S.tarjetas||[]).map((c,i)=>{
-   const li=+c.linea||0, us=consumidoCard(c);
+   const li=+c.linea||0, us=consumidoCard(c), st=cardMonthStatus(c,m2.y,m2.mn);
    return '<button class="nx-card credito'+(i%2?' alt':'')+'" data-go="tarjeta" data-id="'+c.id+'">'+
     '<span class="cn"><span>'+h(c.nombre)+'</span><span class="chip"></span></span>'+
     '<span><span class="cl">Línea disponible</span><span class="cv">'+fmt(Math.max(0,li-us))+'</span></span>'+
-    '<span class="cf"><span>'+(c.last?'•••• '+h(c.last):'Usado '+fmt(us))+'</span>'+
-      '<span>'+(c.dia?'Pago día '+c.dia:'')+'</span></span></button>';
-  }).concat((S.cuentas||[]).map(a=>{
-   const s=saldoCuenta(a.id);
-   return '<button class="nx-card" data-go="cuenta" data-id="'+a.id+'">'+
-    '<span class="cn"><span>'+h(a.nombre)+'</span><span class="chip"></span></span>'+
-    '<span><span class="cl">Saldo registrado</span><span class="cv" style="'+(s<0?'color:var(--nx-neg)':'')+'">'+fmt(s)+'</span></span>'+
-    '<span class="cf"><span>'+(s<0?'En negativo':'Débito / efectivo')+'</span></span></button>';
-  }));
+    '<span class="cf"><span>Usado '+fmt(us)+'</span>'+
+      '<span>'+(st.falta>0.5?'Vence día '+(c.dia||20):'Al día')+'</span></span></button>';
+  });
   const vs=vencs().filter(v=>v.falta>0.5).slice(0,3);
   const ms=(S.metas||[]).slice(0,4);
   const ult=txMes(y,mn).slice(0,4);
@@ -341,8 +490,9 @@
    '<div class="nx-carr">'+avisos().map(a=>'<div class="nx-alert '+a.n+'"><span class="i">'+a.i+'</span>'+
      '<span><b>'+a.t+'</b><span>'+a.s+'</span>'+(a.a?'<a data-go="'+a.a.k+'">'+a.a.r+'</a>':'')+'</span></div>').join('')+'</div>'+
 
-   '<div class="nx-st"><h3>Mis productos</h3><a data-go="tarjetas">Ver todos</a></div>'+
-   '<div class="nx-prods">'+(prods.length?prods.join(''):'<div class="nx-empty">Sin productos.</div>')+'</div>'+
+   '<div class="nx-st"><h3>Mis tarjetas</h3><a data-go="tarjetas">Ver todas</a></div>'+
+   '<div class="nx-prods">'+(prods.length?prods.join('')
+     :'<div class="nx-empty">Sin tarjetas registradas.</div>')+'</div>'+
 
    '<div class="nx-st"><h3>Próximos pagos</h3><a data-go="pagos">Ver todos</a></div>'+
    '<div class="nx-box">'+(vs.length?vs.map(filaVenc).join(''):'<div class="nx-empty">Nada por pagar.</div>')+'</div>'+
@@ -422,18 +572,19 @@
 
  /* --------------------- registrar gasto / ingreso --------------------- */
  let reg={tipo:'Gasto',monto:'',catId:null,cuentaVal:'',desc:''};
- const CATICO=[['Comida',/aliment|comida|mercado/i],['Transp.',/transp/i],['Vivienda',/vivien|alquil/i],
-  ['Servicios',/servici/i],['Ocio',/entreten|ocio|cine/i],['Compras',/compra|ropa/i],
-  ['Salud',/salud/i],['Educ.',/educ/i],['Deudas',/deuda/i],['Otros',/./]];
+ /* Antes esta rejilla era una lista fija de 10 casillas con expresiones
+    regulares, así que las categorías que él creara no aparecían nunca y
+    sobraban casillas vacías ("Otras", "Educ."). Ahora son SUS primeras 9
+    categorías, en su orden, y la décima abre la lista completa. */
+ const CATS_EN_REJILLA=9;
  function catsGrid(){
-  const cats=(S.categorias||[]);
-  const usados={};
-  const out=CATICO.map(([rot,re])=>{
-   const c=cats.find(x=>re.test(x.nombre)&&!usados[x.id]);
-   if(c) usados[c.id]=1;
-   return {rot,cat:c};
-  });
-  return out;
+  const cats=(S.categorias||[]).slice();
+  let vis=cats.slice(0,CATS_EN_REJILLA);
+  if(reg.catId && !vis.some(c=>c.id===reg.catId)){
+   const c=cats.find(x=>x.id===reg.catId);         // la elegida siempre se ve
+   if(c) vis=vis.slice(0,CATS_EN_REJILLA-1).concat([c]);
+  }
+  return vis.map(c=>({rot:rotCat(c),cat:c}));
  }
  P.reg={nav:false,html(){
   const grid=catsGrid();
@@ -452,12 +603,10 @@
    '<div class="nx-mid">'+
    (reg.tipo==='Gasto'
     ? '<div style="font-size:11.5px;font-weight:600;color:var(--nx-mut);margin:4px 0 0">Categoría</div>'+
-      '<div class="nx-cats">'+grid.map((g,i)=>{
-        if(i===grid.length-1 || !g.cat)     /* el último y los huecos abren la lista completa */
-          return '<button class="nx-cat mas" type="button">'+
-            '<span class="e">🗂️</span><span>'+(i===grid.length-1?'Todas':'Otras')+'</span></button>';
-        return '<button class="nx-cat'+(reg.catId===g.cat.id?' on':'')+'" data-c="'+g.cat.id+'">'+
-          '<span class="e">'+emo(g.cat.nombre)+'</span><span>'+g.rot+'</span></button>';}).join('')+'</div>'
+      '<div class="nx-cats">'+grid.map(g=>
+        '<button class="nx-cat'+(reg.catId===g.cat.id?' on':'')+'" data-c="'+g.cat.id+'">'+
+        '<span class="e">'+emoCat(g.cat)+'</span><span>'+h(g.rot)+'</span></button>').join('')+
+       '<button class="nx-cat mas" type="button"><span class="e">🗂️</span><span>Todas</span></button></div>'
     : '<div style="height:8px"></div>')+
    '<button class="nx-fld" id="nxCta"><span class="k">Cuenta</span><span class="v">'+h(cuentaRot)+' ›</span></button>'+
    '<div class="nx-fld"><span class="k">Descripción</span><input id="nxDesc" placeholder="Sin descripción" value="'+h(reg.desc)+'"></div>'+
@@ -484,6 +633,10 @@
    $('nxSave').disabled=!(num>0);
   });
   const de=$('nxDesc'); if(de) de.oninput=()=>{ reg.desc=de.value; };
+  /* si en una pantalla chica la zona de campos no cabe, se marca como scrolleable
+     para que el último campo se desvanezca en vez de aparecer cortado */
+  const md=document.querySelector('#nx-body .nx-mid');
+  if(md) requestAnimationFrame(()=>md.classList.toggle('scrolleable',md.scrollHeight>md.clientHeight+1));
   const ct=$('nxCta'); if(ct) ct.onclick=()=>{
    vib(8);
    const ops=(S.cuentas||[]).map(a=>({v:'a:'+a.id,n:a.nombre,s:'saldo '+fmt(saldoCuenta(a.id)),
@@ -494,9 +647,13 @@
   };
   document.querySelectorAll('#nx-body .nx-cat.mas').forEach(cg=>cg.onclick=()=>{
    vib(8);
-   const ops=(S.categorias||[]).filter(c=>c.auto!=='deuda')
-     .map(c=>({v:String(c.id),n:c.nombre.split(' (')[0],s:c.bucket,e:emo(c.nombre)}));
-   hoja('Elige la categoría',ops,String(reg.catId||''),v=>{ reg.catId=+v; pinta(0); });
+   const ops=(S.categorias||[])
+     .map(c=>({v:String(c.id),n:c.nombre.split(' (')[0],s:c.bucket,e:emoCat(c)}))
+     .concat([{v:'__nueva',n:'Crear una categoría',s:'nombre, icono y tipo',e:'➕'}]);
+   hoja('Elige la categoría',ops,String(reg.catId||''),v=>{
+    if(v==='__nueva'){ abrirCat(0,true); return; }
+    reg.catId=+v; pinta(0);
+   });
   });
   $('nxSave').onclick=()=>{
    const mo=parseFloat(reg.monto)||0; if(!(mo>0)) return;
@@ -506,7 +663,7 @@
    $('mTipo').value=reg.tipo;
    syncMovForm();
    if(reg.tipo==='Gasto'){
-    const cid=reg.catId || (catsGrid().find(g=>g.cat)||{cat:{}}).cat.id;
+    const cid=reg.catId || ((catsGrid()[0]||{cat:{}}).cat||{}).id;
     if(cid) $('mCat').value=cid;
    }
    $('mCuenta').value=reg.cuentaVal; toggleCredito();
@@ -558,6 +715,104 @@
    }).join(''):'<div class="nx-empty">Sin cuentas.</div>')+'</div></div>';
  }};
 
+
+ /* ---- cargos fijos marcados como generados que no están en los movimientos ----
+    Pasa si la nube pisa los movimientos con una versión anterior después de que
+    el motor ya marcó el mes como generado (lastGen). El resultado es un gasto
+    fijo invisible, así que hay que detectarlo, no taparlo. */
+ function recurrentesHuerfanos(){
+  const m=mesSel(), mk=m.y+'-'+pad2(m.mn);
+  return (S.recurrentes||[]).filter(r=>{
+   if(r.lastGen!==mk) return false;
+   if((r.omitidos||[]).indexOf(mk)>=0) return false;      /* él dijo que los deje fuera */
+   return !(S.tx||[]).some(t=>String(t.fecha).slice(0,7)===mk &&
+     (t.rec===r.id || (t.concepto===r.concepto && Math.abs((+t.monto||0)-(+r.monto||0))<0.01)));
+  });
+ }
+
+ function lineaResumen(suma){
+  const m=mesSel();
+  return '<div class="nx-box nxp">'+
+   '<div class="nx-kv"><span>Suma que falta</span><b>'+fmt(suma)+'</b></div>'+
+   '<div class="nx-kv"><span>Disponible ahora</span><b>'+fmt(saldoHasta(m.y,m.mn))+'</b></div>'+
+   '<div class="nx-kv tot"><span>Disponible si los registras</span><b>'+fmt(saldoHasta(m.y,m.mn)-suma)+'</b></div>'+
+   '</div>';
+ }
+
+ P.huerfanos={html(){
+  const m=mesSel();
+  const hu=recurrentesHuerfanos();
+  const suma=hu.reduce((a,r)=>a+(+r.monto||0),0);
+  return barraTop('Cargos fijos faltantes',MES[m.mn-1]+' '+m.y)+
+   '<div class="nx-scroll">'+
+   (hu.length
+    ? '<div class="nx-tip nxw"><span>\uD83E\uDDFE</span><span>La app tiene estos cargos marcados como '+
+       '<b>ya generados</b> en '+MES[m.mn-1]+', pero no existen en tus movimientos. Suele pasar '+
+       'cuando la nube sobrescribe los movimientos con una copia anterior. Mientras falten, tu '+
+       'gasto del mes y tu disponible salen <b>mejores de lo que son</b>.</span></div>'+
+      '<div class="nx-box">'+hu.map(r=>{
+        const c=catById(r.catId);
+        return '<div class="nx-row"><span class="av">'+(c&&c.icono?c.icono:emo((c?c.nombre:'')+' '+r.concepto))+'</span>'+
+         '<span class="tx"><b>'+h(r.concepto)+'</b><span>'+h(c?c.nombre.split(' (')[0]:'-')+
+         ' &middot; día '+r.dia+'</span></span><span class="am"><b>'+fmt(r.monto)+'</b></span></div>';
+       }).join('')+'</div>'+
+      lineaResumen(suma)+
+      '<button class="nx-go" id="nxHuOk">Registrarlos ('+fmt(suma)+')</button>'+
+      '<button class="nx-go sec" id="nxHuNo" style="margin-top:9px">No, ya los pagué por otro lado</button>'
+    : '<div class="nx-empty">Nada pendiente: todos los cargos fijos de '+MES[m.mn-1]+' están registrados.</div>')+
+   '</div>';
+ },wire(){
+  const ok=$('nxHuOk');
+  if(ok) ok.onclick=()=>{
+   const m=mesSel(), mk=m.y+'-'+pad2(m.mn), hu=recurrentesHuerfanos();
+   const suma=hu.reduce((a,r)=>a+(+r.monto||0),0);
+   confirmar({titulo:'¿Registrar '+hu.length+' cargo'+(hu.length===1?'':'s')+' fijo'+(hu.length===1?'':'s')+'?',
+     boton:'Sí, registrarlos',
+     detalle:'Se anotan '+hu.map(r=>'<b>'+h(r.concepto)+'</b> '+fmt(r.monto)).join(', ')+
+      ' en '+MES[m.mn-1]+', cada uno en su día.'+
+      lineaCambio('Disponible del mes',saldoHasta(m.y,m.mn),saldoHasta(m.y,m.mn)-suma)},
+    ()=>{
+     /* se reusa el generador del motor: se le limpia el lastGen y él crea los
+        movimientos con su propia lógica; los que aún no llegan a su día se
+        anotan aparte, también con la forma que usa el motor */
+     hu.forEach(r=>{ const rr=(S.recurrentes||[]).find(x=>x.id===r.id); if(rr) rr.lastGen=''; });
+     generateRecurrentes();          /* crea los que ya pasaron su día */
+     /* y los que aún no llegan a su día (p. ej. día 31) se anotan igual, con
+        la misma forma que usa el motor. Se recorre la lista ORIGINAL: después
+        de limpiar lastGen, recurrentesHuerfanos() ya no los reconocería. */
+     const yaHay=r=>(S.tx||[]).some(t=>String(t.fecha).slice(0,7)===mk &&
+        (t.rec===r.id || (t.concepto===r.concepto && Math.abs((+t.monto||0)-(+r.monto||0))<0.01)));
+     hu.forEach(r=>{
+      const rr=(S.recurrentes||[]).find(x=>x.id===r.id);
+      if(!yaHay(r)){
+       const dia=Math.min(+r.dia||1, diasDeMes(m.y,m.mn));
+       S.tx.push({id:newId(),fecha:mk+'-'+pad2(dia),tipo:'Gasto',catId:r.catId,
+                  cuentaId:r.cuentaId||null,concepto:r.concepto,monto:+r.monto||0,rec:r.id});
+      }
+      if(rr) rr.lastGen=mk;
+     });
+     S.tx.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+     save();
+     toast('Cargos fijos registrados', hu.length+' movimientos por '+fmt(suma), null);
+     pila=['home']; pinta(1);
+    });
+  };
+  const no=$('nxHuNo');
+  if(no) no.onclick=()=>{
+   confirmar({titulo:'¿Dejarlos fuera del mes?',boton:'Sí, dejarlos fuera',
+     detalle:'No se registran. El aviso deja de aparecer, pero tu gasto de este mes '+
+      'seguirá sin incluirlos.'},
+    ()=>{
+     const m2=mesSel(), mk2=m2.y+'-'+pad2(m2.mn);
+     recurrentesHuerfanos().forEach(r=>{
+      const rr=(S.recurrentes||[]).find(x=>x.id===r.id);
+      if(rr){ rr.omitidos=rr.omitidos||[]; if(rr.omitidos.indexOf(mk2)<0) rr.omitidos.push(mk2); }
+     });
+     save(); pila=['home']; pinta(1);
+    });
+  };
+ }};
+
  /* ------------------------------- Tarjetas ------------------------------- */
  P.tarjetas={html(){
   const m=mesSel();
@@ -600,6 +855,11 @@
      '<span class="tx"><b>Estado de cuenta</b><span>Ciclo, cargos y abonos</span></span><span class="ar">›</span></button>'+
     '<button class="nx-row" id="nxPagT"><span class="av">💸</span>'+
      '<span class="tx"><b>Registrar un pago</b><span>Cuota del mes '+fmt(st.cuota)+'</span></span><span class="ar">›</span></button>'+
+    '<button class="nx-row" id="nxCierre"><span class="av">📅</span>'+
+     '<span class="tx"><b>Cierre de facturación</b><span>'+
+     (+c.cierre ? nombreCierre(+c.cierre).toLowerCase()+' · fechas exactas'
+                : 'sin configurar · las fechas salen estimadas')+
+     '</span></span><span class="ar">›</span></button>'+
    '</div>'+
 
    '<div class="nx-st"><h3>Compras en cuotas</h3></div>'+
@@ -616,6 +876,25 @@
    '</div>';
  },wire(p){
   const b=$('nxPagT'); if(b) b.onclick=()=>go('pagar',{tipo:'c',id:p.id});
+  const cb=$('nxCierre'); if(cb) cb.onclick=()=>{
+   vib(8);
+   const c=(S.tarjetas||[]).find(x=>x.id===p.id); if(!c) return;
+   const y=mesSel().y;
+   const ops=[25,31,5,10,15,20,30].map(d=>({v:String(d),n:nombreCierre(d),e:'📅',
+     s:CRONO[d+':'+y] ? 'cronograma cargado · fechas exactas'
+                      : 'sin cronograma · fechas estimadas'}))
+    .concat([{v:'0',n:'Sin configurar',e:'❔',s:'volver a las fechas estimadas'}]);
+   hoja('¿Cuál es el cierre de facturación?',ops,String(+c.cierre||0),v=>{
+    const cc=(S.tarjetas||[]).find(x=>x.id===p.id); if(!cc) return;
+    const antes=JSON.stringify(S);
+    cc.cierre=+v||0; save();
+    toast(+v ? nombreCierre(+v)+' guardado' : 'Cierre sin configurar',
+      CRONO[(+v)+':'+y] ? 'Las fechas de pago ahora salen del cronograma del banco'
+                        : 'Las fechas vuelven a ser estimadas',
+      ()=>{ S=JSON.parse(antes); persist(); renderAll(); toast('Cambio deshecho','',null); });
+    pinta(0);
+   });
+  };
  }};
 
  /* ------------------- estado de cuenta del ciclo ------------------- */
@@ -642,10 +921,14 @@
     kv('Falta pagar',cy.falta>0.5?'<span style="color:var(--nx-warn)">'+fmt2(cy.falta)+'</span>':'<span style="color:var(--nx-pos)">nada</span>')+
    '</div>'+
 
-   '<div class="nx-tip nxw"><span>ℹ️</span><span><b>Las fechas del ciclo son estimadas.</b> '+
-    'El motor guarda tu día de pago (día '+(c.dia||'—')+') pero no el día de cierre, así que se '+
-    'asume el cierre '+CIERRE_ANTES+' días antes. Cuando tengas el estado de cuenta del banco a la '+
-    'mano, dime el día de cierre real y lo dejo exacto.</span></div>'+
+   (cy.exacto
+    ? '<div class="nx-tip"><span>✅</span><span><b>Fechas exactas</b>, tomadas del cronograma '+
+      'de tu banco ('+nombreCierre(+c.cierre).toLowerCase()+'). Los consumos del '+
+      fechaCorta(cy.ini)+' al '+fechaCorta(cy.fin)+' se pagan el <b>'+fechaCorta(cy.venc)+'</b>. '+
+      'Si esa fecha cae fin de semana o feriado, el banco la corre al siguiente día útil.</span></div>'
+    : '<div class="nx-tip nxw"><span>ℹ️</span><span><b>Fechas estimadas.</b> Esta tarjeta no tiene '+
+      'cargado su cierre de facturación, así que se asume el cierre '+CIERRE_ANTES+' días antes del '+
+      'día '+(c.dia||20)+'. Configúralo en la tarjeta y las fechas quedan exactas.</span></div>')+
 
    ((+c.tea||0)>0
     ? '<div class="nx-tip"><span>💡</span><span>Si pagas solo el mínimo, el saldo restante genera '+
@@ -887,10 +1170,12 @@
   const I=ingresoMensual(), bk=bucketReal(y,mn);
   const tg={Necesidad:I*0.5,Gusto:I*0.3,Ahorro:I*0.2};
   const gc={};
+  const ico={};
   (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{
    const c=catById(t.catId), nm=c?c.nombre.split(' (')[0]:'Otros';
+   if(c) ico[nm]=emoCat(c);
    gc[nm]=(gc[nm]||0)+(+t.monto||0); });
-  const lista=Object.keys(gc).map(k=>({n:k,v:gc[k]})).sort((a,b)=>b.v-a.v);
+  const lista=Object.keys(gc).map(k=>({n:k,v:gc[k],e:ico[k]||emo(k)})).sort((a,b)=>b.v-a.v);
   const tot=lista.reduce((a,x)=>a+x.v,0);
   const seg=lista.slice(0,5).map((x,i)=>'<i style="flex:'+(x.v/(tot||1)*100).toFixed(2)+';background:'+RAMPA[i]+'"></i>').join('');
   const blq=(k,v,t)=>{ const p=t>0?Math.min(150,v/t*100):0;
@@ -910,7 +1195,7 @@
    '<div class="nx-st"><h3>Gastos por categoría</h3><span style="font-size:12px;color:var(--nx-mut)">'+fmt(tot)+'</span></div>'+
    (tot?'<div class="nx-seg">'+seg+'</div>':'')+
    '<div class="nx-box">'+(lista.length?lista.map((x,i)=>
-     '<div class="nx-row"><span class="av">'+emo(x.n)+'</span>'+
+     '<div class="nx-row"><span class="av">'+x.e+'</span>'+
      '<span class="tx"><b>'+h(x.n)+'</b><span>'+Math.round(x.v/(tot||1)*100)+'% del mes</span></span>'+
      '<span class="am"><b>'+fmt2(x.v)+'</b></span></div>').join('')
     :'<div class="nx-empty">Sin gastos este mes.</div>')+'</div></div>';
@@ -986,7 +1271,9 @@
  const SUB=[
   {g:'Mi cuenta',k:'p_perfil',ic:'👤',r:'Perfil e ingreso',s:'Nombre, sueldo, AFP y saldo inicial'},
   {g:'Mi cuenta',k:'p_cuentas',ic:'🏦',r:'Cuentas y tarjetas',s:'Medios de pago y líneas'},
+  {g:'Mi cuenta',k:'p_sueldo',ic:'💰',r:'Sueldo quincenal',s:'15 y fin de mes, al día útil'},
   {g:'Finanzas',k:'p_eecc',ic:'📄',r:'Estado de cuenta mensual',s:'PDF y Excel al correo'},
+  {g:'Finanzas',k:'p_cats',ic:'🎨',r:'Categorías',s:'Crear, renombrar, iconos y límites'},
   {g:'Finanzas',k:'p_recurrentes',ic:'🔁',r:'Recurrentes y favoritos',s:'Lo que se repite cada mes'},
   {g:'Finanzas',k:'p_calendario',ic:'🗓️',r:'Calendario',s:'Gasto día por día'},
   {g:'Ajustes',k:'p_nube',ic:'☁️',r:'Sincronización',s:'Laptop y celular iguales'},
@@ -1044,6 +1331,416 @@
   const off=$('nxPinOff'); if(off) off.onclick=()=>{ localStorage.removeItem(PIN_K); alert('PIN desactivado.'); pinta(1); };
   $('nxVib').onclick=()=>{ if(window.vibrarToggle) vibrarToggle(); pinta(1); };
  }};
+
+ /* ==================== categorías: crear, editar y borrar ====================
+    Pedido suyo: "¿Puedo yo aumentar/editar las categorías? que me dé la opción
+    y también de poner iconos". El icono se guarda en la categoría (campo
+    `icono`); si está vacío se sigue adivinando por el nombre, así nada de lo
+    que ya existe cambia de aspecto. Todo lo que escribe pasa por save(). */
+ const ICONOS=['🍔','🍜','🛒','☕','🍺','🎂','🚌','🚕','⛽','🚲','✈️','🏖️',
+  '🏠','💡','💧','📱','🛜','🧾','💊','🏥','🦷','🧴','🎬','🎮','🎧','📺',
+  '🛍️','👕','👟','💅','✂️','📚','🎓','💻','🖨️','🏋️','⚽','🐾','🎁','❤️',
+  '👶','👨‍👩‍👧','🙏','💳','🏦','🎯','💰','📈','🔧','🧹','💸'];
+ const BUCKETS=[['Necesidad','lo que no se puede dejar de pagar','🧱'],
+                ['Gusto','lo que se disfruta y se puede recortar','🎈'],
+                ['Ahorro','lo que se guarda o adelanta deuda','🎯']];
+
+ /* cuántas cosas dependen de una categoría */
+ function usoCat(id){
+  return {tx:(S.tx||[]).filter(t=>t.catId===id).length,
+          rec:(S.recurrentes||[]).filter(r=>r.catId===id).length,
+          fav:(S.favoritos||[]).filter(f=>f.catId===id).length};
+ }
+ const usoTotal=u=>u.tx+u.rec+u.fav;
+ /* "3 movimientos, 1 cargo fijo y 2 favoritos" */
+ const listaEs=xs=>{ const a=xs.filter(Boolean);
+   return a.length<2?(a[0]||''):a.slice(0,-1).join(', ')+' y '+a[a.length-1]; };
+
+ /* borrador del editor; `vuelve` recuerda si vino del registro */
+ let ced={id:0,nombre:'',icono:'',bucket:'Gusto',limite:'',pos:1,vuelve:false};
+ function abrirCat(id,desdeReg){
+  const c=id?(S.categorias||[]).find(x=>x.id===id):null;
+  ced={id:id||0, nombre:c?c.nombre:'', icono:c?(c.icono||''):'',
+       bucket:c?(c.bucket||'Gusto'):'Gusto', limite:c&&+c.limite?String(+c.limite):'',
+       pos:c?(S.categorias.indexOf(c)+1):(S.categorias||[]).length+1,
+       vuelve:!!desdeReg};
+  go('cated',{id:id||0});
+ }
+ const ordinal=i=>i+'º';
+
+ /* rejilla de emojis en la hoja inferior */
+ function hojaIconos(sel,alElegir){
+  const bg=$('nx-bg'), sh=$('nx-sheet');
+  if(!bg||!sh) return;
+  sh.innerHTML='<div class="grab"></div><h4>Elige un icono</h4>'+
+   '<div class="nx-icos">'+ICONOS.map(e=>'<button class="'+(e===sel?'on':'')+'" data-e="'+e+'" '+
+    'type="button" aria-label="icono '+e+'">'+e+'</button>').join('')+'</div>'+
+   '<div class="cbtns"><button class="nx-go sec" id="nxIcoAuto">Dejar que se adivine solo</button></div>';
+  const cerrar=()=>{ bg.classList.remove('on'); sh.classList.remove('on'); };
+  sh.querySelectorAll('.nx-icos button').forEach(b=>b.onclick=()=>{ vib(10); cerrar(); alElegir(b.dataset.e); });
+  $('nxIcoAuto').onclick=()=>{ vib(8); cerrar(); alElegir(''); };
+  bg.onclick=cerrar;
+  bg.classList.add('on'); sh.classList.add('on');
+ }
+
+ P.p_cats={html(){
+  const cats=(S.categorias||[]);
+  return barraTop('Categorías',cats.length+' en uso')+'<div class="nx-scroll">'+
+   '<div class="nx-tip"><span>🎨</span><span>Las primeras <b>'+CATS_EN_REJILLA+'</b> salen en la '+
+    'rejilla al registrar un gasto, en este mismo orden. Toca una para cambiarle el nombre, '+
+    'el icono, el tipo o el límite del mes.</span></div>'+
+   '<div class="nx-box">'+cats.map((c,i)=>{
+     const u=usoTotal(usoCat(c.id));
+     return '<button class="nx-row" data-cat="'+c.id+'">'+
+      '<span class="av">'+emoCat(c)+'</span>'+
+      '<span class="tx"><b>'+h(c.nombre.split(' (')[0])+'</b><span>'+h(c.bucket)+
+       (+c.limite?' · límite '+fmt(c.limite):'')+
+       (i<CATS_EN_REJILLA?' · en la rejilla':'')+'</span></span>'+
+      '<span class="am"><b style="font-weight:600;font-size:12px;color:var(--nx-mut)">'+
+       (u?u+(u===1?' uso':' usos'):'sin usar')+'</b></span></button>';
+   }).join('')+'</div>'+
+   '<button class="nx-go" id="nxCatNue">Crear una categoría</button>'+
+   '</div>';
+ },wire(){
+  $('nxCatNue').onclick=()=>abrirCat(0,false);
+  document.querySelectorAll('#nx-body [data-cat]').forEach(b=>
+   b.onclick=()=>abrirCat(+b.dataset.cat,false));
+ }};
+
+ P.cated={html(p){
+  const nueva=!ced.id;
+  const c=ced.id?(S.categorias||[]).find(x=>x.id===ced.id):null;
+  const esDeudaCat=!!(c&&c.auto==='deuda');
+  const u=c?usoCat(c.id):{tx:0,rec:0,fav:0};
+  const icoMuestra=ced.icono||emo(ced.nombre)||'💸';
+  return barraTop(nueva?'Nueva categoría':'Editar categoría',
+                  nueva?'Nombre, icono y tipo':h((c&&c.nombre.split(' (')[0])||''))+
+   '<div class="nx-scroll">'+
+   '<div class="nx-catprev"><span class="e">'+icoMuestra+'</span>'+
+    '<b>'+h(ced.nombre||'Sin nombre')+'</b><span>'+h(ced.bucket)+'</span></div>'+
+   '<div class="nx-fld"><span class="k">Nombre</span>'+
+    '<input id="nxCN" placeholder="Ej. Mascotas" value="'+h(ced.nombre)+'" maxlength="40"></div>'+
+   '<button class="nx-fld" id="nxCI"><span class="k">Icono</span>'+
+    '<span class="v">'+icoMuestra+(ced.icono?'':' automático')+' ›</span></button>'+
+   (nueva ? '' :
+    '<button class="nx-fld" id="nxCP"><span class="k">Puesto en la lista</span><span class="v">'+
+     ordinal(ced.pos)+(ced.pos<=CATS_EN_REJILLA?' · en la rejilla':' · fuera de la rejilla')+' ›</span></button>')+
+   (esDeudaCat
+    ? '<div class="nx-tip"><span>🔒</span><span>Esta es la categoría con la que la app reconoce '+
+      'los <b>pagos de deuda</b>, así que su tipo no se cambia ni se borra. El nombre y el icono sí.</span></div>'
+    : '<button class="nx-fld" id="nxCB"><span class="k">Tipo</span><span class="v">'+h(ced.bucket)+' ›</span></button>'+
+      '<div class="nx-fld"><span class="k">Límite del mes</span>'+
+       '<input id="nxCL" inputmode="decimal" placeholder="sin límite" value="'+h(ced.limite)+'"></div>')+
+   '<button class="nx-go" id="nxCG">'+(nueva?'Crear categoría':'Guardar cambios')+'</button>'+
+   (nueva||esDeudaCat ? '' :
+    '<button class="nx-go sec" id="nxCD" style="margin-top:9px;color:var(--nx-neg)">Borrar categoría</button>'+
+    (usoTotal(u)?'<div style="font-size:11.5px;color:var(--nx-mut);margin-top:8px;text-align:center">'+
+      'La usan '+listaEs([
+        u.tx?u.tx+' movimiento'+(u.tx===1?'':'s'):'',
+        u.rec?u.rec+' cargo'+(u.rec===1?' fijo':'s fijos'):'',
+        u.fav?u.fav+' favorito'+(u.fav===1?'':'s'):''])+
+      '. Si la borras, te pregunto a dónde pasarlos.</div>':''))+
+   '</div>';
+ },wire(){
+  const nn=$('nxCN'); if(nn) nn.oninput=()=>{ ced.nombre=nn.value; };
+  const nl=$('nxCL'); if(nl) nl.oninput=()=>{ ced.limite=nl.value.replace(/[^0-9.]/g,''); };
+  const bi=$('nxCI'); if(bi) bi.onclick=()=>{ vib(8);
+   hojaIconos(ced.icono,e=>{ ced.icono=e; pinta(0); }); };
+  const bp=$('nxCP'); if(bp) bp.onclick=()=>{ vib(8);
+   const n=(S.categorias||[]).length;
+   const ops=[]; for(let i=1;i<=n;i++) ops.push({v:String(i),n:ordinal(i),
+     e:i<=CATS_EN_REJILLA?'🔵':'⚪',
+     s:i<=CATS_EN_REJILLA?'sale en la rejilla del registro':'sólo en la lista completa'});
+   hoja('¿En qué puesto la pongo?',ops,String(ced.pos),v=>{ ced.pos=+v||1; pinta(0); });
+  };
+  const bb=$('nxCB'); if(bb) bb.onclick=()=>{ vib(8);
+   hoja('¿Qué tipo de gasto es?',BUCKETS.map(([v,s,e])=>({v,n:v,s,e})),ced.bucket,
+        v=>{ ced.bucket=v; pinta(0); }); };
+
+  $('nxCG').onclick=()=>{
+   const nom=(ced.nombre||'').trim();
+   if(!nom){ toast('Ponle un nombre','La categoría necesita un nombre para poder elegirla',null); return; }
+   const rep=(S.categorias||[]).find(x=>x.id!==ced.id &&
+     x.nombre.trim().toLowerCase()===nom.toLowerCase());
+   if(rep){ toast('Ya tienes esa categoría','Se llama igual: '+rep.nombre,null); return; }
+   const antes=JSON.stringify(S);
+   const lim=parseFloat(ced.limite)||0;
+   if(ced.id){
+    const c=(S.categorias||[]).find(x=>x.id===ced.id); if(!c) return;
+    c.nombre=nom;
+    if(ced.icono) c.icono=ced.icono; else delete c.icono;
+    if(c.auto!=='deuda'){ c.bucket=ced.bucket; c.limite=lim; }
+    const desde=S.categorias.indexOf(c), hasta=Math.max(0,Math.min(S.categorias.length-1,ced.pos-1));
+    if(desde>=0 && desde!==hasta){ S.categorias.splice(desde,1); S.categorias.splice(hasta,0,c); }
+    vib(16); save();
+    toast('Categoría guardada',nom,()=>{ S=JSON.parse(antes); persist(); renderAll(); toast('Cambio deshecho','',null); });
+   } else {
+    const nueva={id:newId(),nombre:nom,bucket:ced.bucket,limite:lim,sugerencias:[]};
+    if(ced.icono) nueva.icono=ced.icono;
+    S.categorias.push(nueva);
+    vib(16); save();
+    if(ced.vuelve) reg.catId=nueva.id;          // si vino del registro, queda elegida
+    toast('Categoría creada',nom+' · '+ced.bucket,
+      ()=>{ S=JSON.parse(antes); persist(); renderAll(); toast('Se deshizo la creación','',null); });
+   }
+   volver();
+  };
+
+  const bd=$('nxCD');
+  if(bd) bd.onclick=()=>{
+   const c=(S.categorias||[]).find(x=>x.id===ced.id); if(!c) return;
+   const u=usoCat(c.id), n=usoTotal(u);
+   const otras=(S.categorias||[]).filter(x=>x.id!==c.id);
+   if(!otras.length){ toast('No se puede borrar','Es la única categoría que te queda',null); return; }
+   const borrar=(destino)=>{
+    const antes=JSON.stringify(S);
+    const det=(n
+      ? '<div>Se mueven <b>'+n+'</b> registro'+(n===1?'':'s')+' a <b>'+h(destino.nombre.split(' (')[0])+
+        '</b> y luego se borra <b>'+h(c.nombre.split(' (')[0])+'</b>. Tus totales del mes '+
+        '<b>no cambian</b>: sólo cambia en qué cajón se cuentan.</div>'
+      : '<div>No hay ningún movimiento con <b>'+h(c.nombre.split(' (')[0])+'</b>, así que no se '+
+        'pierde nada.</div>');
+    confirmar({titulo:'¿Borrar la categoría?',boton:'Sí, borrar',detalle:det},()=>{
+     (S.tx||[]).forEach(t=>{ if(t.catId===c.id) t.catId=destino.id; });
+     (S.recurrentes||[]).forEach(r=>{ if(r.catId===c.id) r.catId=destino.id; });
+     (S.favoritos||[]).forEach(f=>{ if(f.catId===c.id) f.catId=destino.id; });
+     S.categorias=S.categorias.filter(x=>x.id!==c.id);
+     vib(18); save();
+     toast('Categoría borrada', n?n+' registro'+(n===1?'':'s')+' quedaron en '+destino.nombre.split(' (')[0]:'',
+       ()=>{ S=JSON.parse(antes); persist(); renderAll(); toast('Borrado deshecho','',null); });
+     volver();
+    });
+   };
+   vib(8);
+   if(n) hoja(n===1?'¿A qué categoría paso ese registro?':'¿A qué categoría paso esos '+n+' registros?',
+        otras.map(x=>({v:String(x.id),n:x.nombre.split(' (')[0],s:x.bucket,e:emoCat(x)})),'',
+        v=>borrar(otras.find(x=>x.id===+v)));
+   else borrar(otras[0]);
+  };
+ }};
+
+
+ /* ===================== sueldo quincenal automático =====================
+    Como me lo explicó: le pagan el 15 y el último día del mes, y si esa
+    fecha cae sábado, domingo o feriado, el depósito se adelanta al día útil
+    anterior. Agosto 2026 lo confirma: el 15 fue sábado y le pagaron el
+    viernes 14; el 31 es lunes y le pagan el 31.
+    Los feriados nacionales del Perú se calculan, no se copian a mano: 14 son
+    de fecha fija y Jueves y Viernes Santo salen de la Pascua. */
+ function pascua(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
+   f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),hh=(19*a+b-d-g+15)%30,
+   i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-hh-k)%7,m=Math.floor((a+11*hh+22*l)/451),
+   mes=Math.floor((hh+l-7*m+114)/31),dia=((hh+l-7*m+114)%31)+1;
+  return new Date(y,mes-1,dia);
+ }
+ const FERIADOS_FIJOS=['01-01','05-01','06-07','06-29','07-23','07-28','07-29',
+  '08-06','08-30','10-08','11-01','12-08','12-09','12-25'];
+ const NOMBRE_FER={'01-01':'Año Nuevo','05-01':'Día del Trabajo','06-07':'Día de la Bandera',
+  '06-29':'San Pedro y San Pablo','07-23':'Día de la Fuerza Aérea','07-28':'Fiestas Patrias',
+  '07-29':'Fiestas Patrias','08-06':'Batalla de Junín','08-30':'Santa Rosa de Lima',
+  '10-08':'Combate de Angamos','11-01':'Todos los Santos','12-08':'Inmaculada Concepción',
+  '12-09':'Batalla de Ayacucho','12-25':'Navidad'};
+ const _ferCache={};
+ function feriadosPE(y){
+  if(_ferCache[y]) return _ferCache[y];
+  const p=pascua(y), js=new Date(p), vs=new Date(p);
+  js.setDate(p.getDate()-3); vs.setDate(p.getDate()-2);
+  const k=d=>pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+  const m={}; FERIADOS_FIJOS.forEach(f=>m[f]=NOMBRE_FER[f]);
+  m[k(js)]='Jueves Santo'; m[k(vs)]='Viernes Santo';
+  return (_ferCache[y]=m);
+ }
+ const feriadoDe=d=>feriadosPE(d.getFullYear())[pad2(d.getMonth()+1)+'-'+pad2(d.getDate())]||'';
+ const finDeSemana=d=>d.getDay()===0||d.getDay()===6;
+ /** día útil anterior (o el mismo si ya es útil), con el motivo del salto */
+ function habilAntes(d){
+  const x=new Date(d); let motivo='';
+  while(finDeSemana(x)||feriadoDe(x)){
+   if(!motivo) motivo = finDeSemana(x) ? (x.getDay()===6?'sábado':'domingo') : feriadoDe(x);
+   x.setDate(x.getDate()-1);
+  }
+  return {fecha:x, motivo};
+ }
+ const SUELDO_DEF={on:false,q1:0,q2:0,cuentaId:null,desde:''};
+ const cfgSueldo=()=>{ S.cfg.sueldo=Object.assign({},SUELDO_DEF,S.cfg.sueldo||{}); return S.cfg.sueldo; };
+ /** las dos fechas de pago de un mes, ya corridas al día útil */
+ function fechasSueldo(y,mn){
+  const ult=diasDeMes(y,mn);
+  return [15,ult].map((dia,i)=>{
+   const nominal=new Date(y,mn-1,dia), r=habilAntes(nominal);
+   return {q:i+1, k:y+'-'+pad2(mn)+'-q'+(i+1), fecha:keyOf(r.fecha), nominal:keyOf(nominal),
+           motivo:r.motivo, dow:DIAS[r.fecha.getDay()],
+           rot:i===0?'1ª quincena':'fin de mes'};
+  });
+ }
+ const montoQuincena=q=>{ const s=cfgSueldo(); return +( q===1 ? s.q1 : s.q2 )||0; };
+ const yaHaySueldo=k=>(S.tx||[]).some(t=>t.sueldoK===k);
+ /** todas las fechas de pago entre `desde` y hoy que aún no están anotadas */
+ function sueldosPendientes(){
+  const s=cfgSueldo(); if(!s.on) return [];
+  const hoyK=keyOf(new Date()), out=[];
+  if(!s.desde) return out;
+  const d0=new Date(s.desde+'T00:00');
+  let y=d0.getFullYear(), mn=d0.getMonth()+1;
+  const fin=new Date(); let vueltas=0;
+  while((y<fin.getFullYear()||(y===fin.getFullYear()&&mn<=fin.getMonth()+1)) && vueltas++<400){
+   fechasSueldo(y,mn).forEach(f=>{
+    if(f.fecha>=s.desde && f.fecha<=hoyK && !yaHaySueldo(f.k) && montoQuincena(f.q)>0) out.push(f);
+   });
+   mn++; if(mn>12){ mn=1; y++; }
+  }
+  return out;
+ }
+ /** anota los pagos que ya ocurrieron. Devuelve los que anotó. */
+ function generarSueldo(){
+  const s=cfgSueldo(), pend=sueldosPendientes();
+  if(!pend.length) return [];
+  pend.forEach(f=>{
+   S.tx.push({id:newId(),fecha:f.fecha,tipo:'Ingreso',catId:null,
+     cuentaId:s.cuentaId||null,concepto:'Sueldo · '+f.rot,
+     monto:montoQuincena(f.q),sueldoK:f.k});
+  });
+  S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  try{ persist(); }catch(e){ console.warn('NEXO sueldo',e); }
+  return pend;
+ }
+ /** la próxima fecha de pago desde hoy (para avisos) */
+ function proximoSueldo(){
+  const s=cfgSueldo(); if(!s.on) return null;
+  const hoyK=keyOf(new Date()), n=new Date();
+  for(let i=0;i<3;i++){
+   let y=n.getFullYear(), mn=n.getMonth()+1+i; while(mn>12){ mn-=12; y++; }
+   const f=fechasSueldo(y,mn).find(x=>x.fecha>=hoyK && montoQuincena(x.q)>0);
+   if(f) return f;
+  }
+  return null;
+ }
+
+ P.p_sueldo={html(){
+  const s=cfgSueldo();
+  const cta=(S.cuentas||[]).find(a=>a.id===s.cuentaId);
+  const m=mesSel(), prox=proximoSueldo(), pend=sueldosPendientes();
+  const filas=[];
+  for(let i=0;i<3;i++){
+   let y=m.y, mn=m.mn+i; while(mn>12){ mn-=12; y++; }
+   fechasSueldo(y,mn).forEach(f=>filas.push(Object.assign({y,mn},f)));
+  }
+  const netoBoleta=(+s.q1||0)+(+s.q2||0);
+  const netoApp=(()=>{ try{ return +neto().toFixed(2); }catch(e){ return 0; } })();
+  return barraTop('Sueldo quincenal',s.on?'Se anota solo el 15 y a fin de mes':'Apagado')+
+   '<div class="nx-scroll">'+
+   '<div class="nx-tip"><span>💰</span><span>Te pagan el <b>15</b> y el <b>último día del mes</b>. '+
+    'Si esa fecha cae sábado, domingo o feriado, el depósito se adelanta al <b>día útil anterior</b> '+
+    '— por eso en agosto te pagaron el viernes 14. La app calcula la fecha sola, con los feriados '+
+    'nacionales del Perú incluidos.</span></div>'+
+
+   '<button class="nx-fld" id="nxSuOn"><span class="k">Anotarlo automáticamente</span>'+
+    '<span class="v">'+(s.on?'Sí ›':'No ›')+'</span></button>'+
+   '<div class="nx-fld"><span class="k">1ª quincena (día 15)</span>'+
+    '<input id="nxSuQ1" inputmode="decimal" placeholder="0.00" value="'+(+s.q1||'')+'"></div>'+
+   '<div class="nx-fld"><span class="k">Fin de mes</span>'+
+    '<input id="nxSuQ2" inputmode="decimal" placeholder="0.00" value="'+(+s.q2||'')+'"></div>'+
+   '<button class="nx-fld" id="nxSuCta"><span class="k">Entra a</span>'+
+    '<span class="v">'+h(cta?cta.nombre:'elegir cuenta')+' ›</span></button>'+
+   '<button class="nx-go" id="nxSuGuardar">Guardar</button>'+
+
+   (netoBoleta>0 && Math.abs(netoBoleta-netoApp)>0.5
+    ? '<div class="nx-tip nxw" style="margin-top:12px"><span>🧮</span><span>Tu boleta te deposita '+
+      '<b>'+fmt2(netoBoleta)+'</b> al mes, pero la app calcula un neto de <b>'+fmt2(netoApp)+'</b> '+
+      'a partir de tu sueldo bruto y tus descuentos. La diferencia es '+
+      fmt2(Math.abs(netoBoleta-netoApp))+' y el presupuesto usa la cifra de la app. '+
+      'Si quieres, la cuadro con lo que realmente te llega.</span></div>'+
+      '<button class="nx-go sec" id="nxSuCuadrar">Cuadrar el neto con mi boleta</button>'
+    : '')+
+
+   '<div class="nx-st" style="margin-top:20px"><h3>Próximas fechas</h3>'+
+    (prox?'<span style="font-size:12px;color:var(--nx-mut)">la próxima: '+fechaCorta(prox.fecha)+'</span>':'')+'</div>'+
+   '<div class="nx-box">'+filas.map(f=>{
+     const ya=yaHaySueldo(f.k), mo=montoQuincena(f.q);
+     const antesDe=!!(s.desde && f.fecha<s.desde);
+     return '<div class="nx-row"'+(antesDe?' style="opacity:.55"':'')+'>'+
+      '<span class="av">'+(ya?'✅':antesDe?'➖':'💰')+'</span>'+
+      '<span class="tx"><b>'+fechaCorta(f.fecha)+' · '+f.dow+'</b><span>'+f.rot+
+       (f.motivo?' · el '+(+f.nominal.split("-")[2])+' cae '+h(f.motivo)+', se adelanta':'')+
+       (ya?' · ya anotado':antesDe?' · pasó antes de activar esto, no se anota':'')+'</span></span>'+
+      '<span class="am"><b>'+(mo>0?fmt2(mo):'—')+'</b></span></div>';
+   }).join('')+'</div>'+
+
+   (pend.length
+    ? '<button class="nx-go" id="nxSuAhora" style="margin-top:12px">Anotar '+pend.length+
+      ' pago'+(pend.length===1?'':'s')+' que ya pasó'+(pend.length===1?'':'aron')+'</button>'
+    : '')+
+
+   '<div class="nx-tip" style="margin-top:14px"><span>🗓️</span><span>Feriados que usa para '+
+    (new Date()).getFullYear()+': '+Object.keys(feriadosPE((new Date()).getFullYear())).sort()
+      .map(k=>(+k.split('-')[1])+' '+MESab[+k.split('-')[0]-1]).join(' · ')+
+    '.</span></div>'+
+   '</div>';
+ },wire(){
+  const s=cfgSueldo();
+  const q1=$('nxSuQ1'), q2=$('nxSuQ2');
+  if(q1) q1.oninput=()=>{ q1.value=q1.value.replace(/[^0-9.]/g,''); };
+  if(q2) q2.oninput=()=>{ q2.value=q2.value.replace(/[^0-9.]/g,''); };
+  $('nxSuOn').onclick=()=>{ vib(8);
+   hoja('¿Anoto tu sueldo automáticamente?',
+     [{v:'1',n:'Sí, anótalo solo',e:'✅',s:'cada 15 y fin de mes, al día útil'},
+      {v:'0',n:'No, lo anoto yo',e:'✋',s:'la app no toca tus movimientos'}],
+     s.on?'1':'0', v=>{
+      const c=cfgSueldo(); c.on=(v==='1');
+      if(c.on && !c.desde) c.desde=keyOf(new Date());
+      save(); pinta(0);
+     });
+  };
+  $('nxSuCta').onclick=()=>{ vib(8);
+   hoja('¿A qué cuenta entra?',(S.cuentas||[]).map(a=>({v:String(a.id),n:a.nombre,
+     e:/yape|plin/i.test(a.nombre)?'📲':/efectivo/i.test(a.nombre)?'💵':/d[eé]bito/i.test(a.nombre)?'💳':'🏦',
+     s:'saldo '+fmt(saldoCuenta(a.id))})),String(s.cuentaId||''),v=>{
+      cfgSueldo().cuentaId=+v; save(); pinta(0); });
+  };
+  $('nxSuGuardar').onclick=()=>{
+   const c=cfgSueldo(), antes=JSON.stringify(S);
+   c.q1=parseFloat(($('nxSuQ1')||{}).value)||0;
+   c.q2=parseFloat(($('nxSuQ2')||{}).value)||0;
+   if(c.on && !c.desde) c.desde=keyOf(new Date());
+   vib(16); save();
+   toast('Sueldo guardado',fmt2(c.q1)+' el 15 y '+fmt2(c.q2)+' a fin de mes',
+     ()=>{ S=JSON.parse(antes); persist(); renderAll(); toast('Cambio deshecho','',null); });
+   pinta(0);
+  };
+  const ah=$('nxSuAhora');
+  if(ah) ah.onclick=()=>{
+   const pend=sueldosPendientes(), suma=pend.reduce((a,f)=>a+montoQuincena(f.q),0);
+   const m=mesSel();
+   confirmar({titulo:'¿Anotar '+pend.length+' pago'+(pend.length===1?'':'s')+' de sueldo?',boton:'Sí, anotar',
+     detalle:'<div>Se anotan '+pend.map(f=>fmt2(montoQuincena(f.q))+' el '+fechaCorta(f.fecha)).join(', ')+
+      '.</div>'+lineaCambio('Disponible del mes',saldoHasta(m.y,m.mn),saldoHasta(m.y,m.mn)+suma)},()=>{
+    const antes=JSON.stringify(S);
+    const hechos=generarSueldo(); renderAll(); pinta(0);
+    toast('Sueldo anotado',hechos.length+' ingreso'+(hechos.length===1?'':'s')+' de '+fmt2(suma),
+      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Se deshizo','',null); });
+   });
+  };
+  const cu=$('nxSuCuadrar');
+  if(cu) cu.onclick=()=>{
+   const c=cfgSueldo(), boleta=(+c.q1||0)+(+c.q2||0);
+   const bruto=+S.cfg.bruto||0, tasas=(+S.cfg.aporte||0)+(+S.cfg.comision||0)+(+S.cfg.seguro||0);
+   const otrosNuevo=+(bruto-boleta-bruto*tasas).toFixed(2);
+   if(otrosNuevo<0){ toast('No cuadra así','Tu boleta paga más que el bruto menos los descuentos',null); return; }
+   const iA=ingresoMensual(), antes=JSON.stringify(S);
+   confirmar({titulo:'¿Cuadrar el neto con tu boleta?',boton:'Sí, cuadrar',
+     detalle:'<div>Se sube <b>otros descuentos</b> de '+fmt2(+S.cfg.otros||0)+' a <b>'+fmt2(otrosNuevo)+
+      '</b>, así el neto de la app pasa a ser '+fmt2(boleta)+', lo que de verdad te depositan. '+
+      'Esto cambia la base de tu presupuesto 50/30/20.</div>'+
+      lineaCambio('Ingreso del mes',iA,boleta+(+S.cfg.otrosIngresos||0))},()=>{
+    S.cfg.otros=otrosNuevo; vib(16); save();
+    toast('Neto cuadrado','Ahora la app usa '+fmt2(boleta)+' de sueldo',
+      ()=>{ S=JSON.parse(antes); persist(); renderAll(); pinta(0); toast('Cambio deshecho','',null); });
+    pinta(0);
+   });
+  };
+ }};
+
  P.p_datos={html(){
   return barraTop('Copias y datos','Exportar, restaurar y reiniciar')+'<div class="nx-scroll">'+
    '<div class="nx-tip nxw"><span>⚠️</span><span>Si borras los datos del navegador, tus finanzas se van '+
@@ -1062,6 +1759,137 @@
    '<div class="nx-tip"><span>ℹ️</span><span>Tus datos viven en este navegador y, si conectaste la '+
     'sincronización, en un archivo JSON de <b>tu</b> Drive. No pasan por ningún otro servidor.</span></div></div>';
  }};
+
+ /* ======== interceptar los borrados: preguntar antes, con la consecuencia ========
+    Se envuelven las funciones globales del motor. Las que ya traían un
+    confirm() del navegador quedan con el nuestro: durante la llamada real se
+    silencia el confirm nativo para no preguntar dos veces. */
+ function sinConfirmNativo(fn){
+  const c=window.confirm; window.confirm=()=>true;
+  try{ fn(); } finally{ window.confirm=c; }
+ }
+ function envolverBorrado(nombre,armar){
+  const orig=window[nombre];
+  if(typeof orig!=='function') return;
+  window[nombre]=function(){
+   const args=arguments;
+   let o;
+   try{ o=armar.apply(null,args); }catch(e){ o=null; }
+   if(!o){ sinConfirmNativo(()=>orig.apply(null,args)); return; }
+   confirmar(o,()=>sinConfirmNativo(()=>orig.apply(null,args)));
+  };
+ }
+
+ (function(){
+  const nom=x=>h(x||'—');
+  const cambio=mut=>{ const r=simular(mut);
+   return lineaCambio('Deuda total',r.deudaA,r.deudaB)+lineaCambio('Disponible del mes',r.cajaA,r.cajaB); };
+
+  envolverBorrado('delFav',id=>{
+   const f=(S.favoritos||[]).find(x=>x.id===id); if(!f) return null;
+   return {titulo:'¿Borrar el favorito?',boton:'Sí, borrar',
+    detalle:'Se quita <b>'+nom(f.concepto)+'</b> de S/ '+(+f.monto||0).toFixed(2)+
+     ' de tus accesos rápidos. Los movimientos que ya registraste con él <b>no cambian</b>.'};
+  });
+
+  envolverBorrado('delRec',id=>{
+   const r=(S.recurrentes||[]).find(x=>x.id===id); if(!r) return null;
+   return {titulo:'¿Borrar el recurrente?',boton:'Sí, borrar',
+    detalle:'<b>'+nom(r.concepto)+'</b> de '+fmt(r.monto)+' el día '+r.dia+
+     ' deja de generarse solo cada mes. Los que ya se generaron <b>quedan registrados</b>.'};
+  });
+
+  envolverBorrado('delCuenta',id=>{
+   const a=(S.cuentas||[]).find(x=>x.id===id); if(!a) return null;
+   const n=(S.tx||[]).filter(t=>t.cuentaId===id).length;
+   return {titulo:'¿Borrar la cuenta?',boton:'Sí, borrar',
+    detalle:'<b>'+nom(a.nombre)+'</b> tiene <b>'+n+' movimiento'+(n===1?'':'s')+
+     '</b> y un saldo de '+fmt(saldoCuenta(id))+'. Al borrarla esos movimientos quedan '+
+     '<b>sin cuenta asignada</b>: siguen contando en tu caja, pero ya no sabrás con qué pagaste.'+
+     cambio(()=>{ S.cuentas=(S.cuentas||[]).filter(x=>x.id!==id); })};
+  });
+
+  envolverBorrado('delCard',id=>{
+   const c=(S.tarjetas||[]).find(x=>x.id===id); if(!c) return null;
+   const nc=(c.compras||[]).length, pend=consumidoCard(c);
+   return {titulo:'¿Borrar la tarjeta?',boton:'Sí, borrar la tarjeta',
+    detalle:'<b>'+nom(c.nombre)+'</b> tiene <b>'+nc+' compra'+(nc===1?'':'s')+' en cuotas</b> con '+
+     fmt(pend)+' pendiente. Se borran con ella.'+
+     cambio(()=>{ S.tarjetas=S.tarjetas.filter(x=>x.id!==id); })};
+  });
+
+  envolverBorrado('delCompra',(cid,pid)=>{
+   const c=(S.tarjetas||[]).find(x=>x.id===cid); if(!c) return null;
+   const p=(c.compras||[]).find(x=>x.id===pid); if(!p) return null;
+   return {titulo:'¿Borrar la compra en cuotas?',boton:'Sí, borrar',
+    detalle:'<b>'+nom(p.desc||'Compra')+'</b> de '+fmt(p.saldo)+' en '+(p.n||1)+
+     ' cuota'+((p.n||1)===1?'':'s')+', en '+nom(c.nombre)+'.'+
+     cambio(()=>{ const cc=S.tarjetas.find(x=>x.id===cid);
+       if(cc) cc.compras=(cc.compras||[]).filter(x=>x.id!==pid); })};
+  });
+
+  envolverBorrado('delLoan',id=>{
+   const l=(S.loans||[]).find(x=>x.id===id); if(!l) return null;
+   const fin=(S.tx||[]).filter(t=>t.loanId===id).length;
+   return {titulo:'¿Borrar el préstamo?',boton:'Sí, borrar el préstamo',
+    detalle:'<b>'+nom(l.nombre)+'</b> tiene '+fmt(loanRem(l))+' de saldo y cuota de '+fmt(l.cuota)+'.'+
+     (fin?' También se quita el ingreso de financiamiento que registró.':'')+
+     cambio(()=>{ S.loans=S.loans.filter(x=>x.id!==id); S.tx=S.tx.filter(t=>t.loanId!==id); })};
+  });
+
+  envolverBorrado('delMeta',id=>{
+   const g=(S.metas||[]).find(x=>x.id===id); if(!g) return null;
+   return {titulo:'¿Borrar la meta?',boton:'Sí, borrar',
+    detalle:'<b>'+nom(g.nombre)+'</b> con '+fmt(g.ahorrado)+' ahorrado de '+fmt(g.objetivo)+
+     '. <b>No afecta tu caja</b>: la meta es un objetivo, no una cuenta.'};
+  });
+
+  envolverBorrado('delCat',id=>{
+   const c=(S.categorias||[]).find(x=>x.id===id); if(!c) return null;
+   const n=(S.tx||[]).filter(t=>t.catId===id).length;
+   return {titulo:'¿Borrar la categoría?',boton:'Sí, borrar',
+    detalle:'<b>'+nom(c.nombre)+'</b> la usan <b>'+n+' movimiento'+(n===1?'':'s')+
+     '</b>. Al borrarla quedan sin categoría y <b>salen del presupuesto 50/30/20</b>.'};
+  });
+
+  envolverBorrado('delMov',id=>{
+   const t=(S.tx||[]).find(x=>x.id===id); if(!t) return null;
+   const c=catById(t.catId);
+   return {titulo:'¿Borrar el movimiento?',boton:'Sí, borrar',
+    detalle:'<b>'+nom(t.concepto)+'</b> de '+fmt(t.monto)+' del '+
+     String(t.fecha).split('-').reverse().join('/')+
+     (c?' · '+nom(c.nombre.split(' (')[0]):'')+'.'+
+     cambio(()=>{ if(t.cardId&&t.compraId){ const cc=S.tarjetas.find(x=>x.id===t.cardId);
+        if(cc) cc.compras=(cc.compras||[]).filter(p=>p.id!==t.compraId); }
+       S.tx=S.tx.filter(x=>x.id!==id); })};
+  });
+
+  /* ---- los cambios de un campo no preguntan: dejan "Deshacer" ---- */
+  const CAMPO={monto:'el monto',cuota:'la cuota',meses:'el plazo',dia:'el día de pago',
+   nombre:'el nombre',linea:'la línea',pagoMin:'el pago mínimo',saldo:'el saldo',
+   n:'el número de cuotas',tea:'la tasa',objetivo:'el objetivo',ahorrado:'lo ahorrado',
+   fecha:'la fecha',desc:'la descripción',titular:'el nombre',bruto:'el sueldo bruto',
+   aporte:'el aporte AFP',comision:'la comisión AFP',seguro:'la prima de seguro',
+   otros:'otros descuentos',otrosIngresos:'otros ingresos',saldoIni:'el saldo inicial'};
+  const rotCampo=f=>CAMPO[f]||('«'+f+'»');
+  [['editLoan','del préstamo',1],['editCard','de la tarjeta',1],['editCompra','de la compra',2],
+   ['editMeta','de la meta',1],['setCfg','de tu perfil',0]].forEach(([nombre,que,posCampo])=>{
+   const orig=window[nombre];
+   if(typeof orig!=='function') return;
+   window[nombre]=function(){
+    const copia=JSON.stringify(S), m=mesSel();
+    const dA=deudaTotal(), cA=saldoHasta(m.y,m.mn);
+    orig.apply(null,arguments);
+    const dB=deudaTotal(), cB=saldoHasta(m.y,m.mn);
+    const partes=[];
+    if(Math.abs(dA-dB)>0.5) partes.push('deuda '+fmt(dA)+' → '+fmt(dB));
+    if(Math.abs(cA-cB)>0.5) partes.push('disponible '+fmt(cA)+' → '+fmt(cB));
+    toast('Cambiaste '+rotCampo(arguments[posCampo])+' '+que,
+     partes.length?partes.join(' · '):'',
+     ()=>{ S=JSON.parse(copia); persist(); renderAll(); toast('Cambio deshecho','',null); });
+   };
+  });
+ })();
 
  /* ============================ arranque ============================ */
  const NAVICO={
@@ -1097,8 +1925,35 @@
   },{passive:false});
  }
 
+ /* Una sola vez: a las tarjetas que ya existen en el teléfono se les pone el
+    cierre que corresponde, así las fechas dejan de ser estimadas sin que él
+    tenga que configurar nada. Sólo rellena lo que está vacío, y desde la
+    pantalla de la tarjeta se puede cambiar. */
+ function sembrarCierres(){
+  let toco=false;
+  (S.tarjetas||[]).forEach(c=>{
+   if(+c.cierre) return;
+   const n=(c.nombre||'').toLowerCase();
+   if(/bcp/.test(n))            { c.cierre=25; toco=true; }
+   else if(/interbank|ibk/.test(n)) { c.cierre=31; toco=true; }
+  });
+  if(toco) try{ save(); }catch(e){ console.warn('NEXO cierres',e); }
+ }
+
+ /* Su configuración de sueldo, una sola vez: 1,484.97 el 15 y 1,484.97 a fin de
+    mes, a la cuenta bancaria, contando desde hoy (me pidió no registrar el
+    pago del 14 de agosto que ya había pasado). */
+ function sembrarSueldo(){
+  if(S.cfg.sueldo) return;
+  const cta=(S.cuentas||[]).find(a=>/cuenta bancaria|banco|sueldo/i.test(a.nombre))||(S.cuentas||[])[0];
+  S.cfg.sueldo={on:true,q1:1484.97,q2:1484.97,cuentaId:cta?cta.id:null,desde:keyOf(new Date())};
+  try{ save(); }catch(e){ console.warn('NEXO sueldo semilla',e); }
+ }
+
  function montar(){
   if($('nx')) return;
+  sembrarCierres(); sembrarSueldo();
+  const nuevos=generarSueldo();
   document.body.classList.add('nx-on');
   apagarViejo(); sinZoom();
   const root=document.createElement('div'); root.id='nx';
@@ -1112,6 +1967,8 @@
   $('nx-fab').onclick=()=>go('reg');
   pila=[ localStorage.getItem(PIN_K) ? 'login' : 'home' ];
   pinta(1);
+  if(nuevos.length) setTimeout(()=>toast(
+    'Anoté tu sueldo',nuevos.map(f=>fmt2(montoQuincena(f.q))+' el '+fechaCorta(f.fecha)).join(' · '),null),900);
  }
 
  /* cada vez que el motor guarda, se repinta la pantalla actual */
