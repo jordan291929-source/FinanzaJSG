@@ -57,7 +57,11 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
 #nx{max-width:520px;margin:0 auto;min-height:100vh;position:relative;
  font-family:'Inter',system-ui,Arial,sans-serif;font-size:14px;line-height:1.5}
 #nx *{box-sizing:border-box}
-#nx button{font-family:inherit;cursor:pointer}
+/* La app vieja trae un `button{color:#fff}` global que se cuela dentro de #nx y
+   ya me pintó texto blanco sobre blanco tres veces (campo Cuenta, tarjetas de
+   la bandeja...). En vez de ir rescatando clase por clase, todos los botones de
+   #nx heredan el color de su contexto y los que sí van en blanco lo piden. */
+#nx button{font-family:inherit;cursor:pointer;color:inherit}
 .nx-scroll{padding:0 16px calc(var(--nx-navh) + env(safe-area-inset-bottom) + 74px)}
 /* el aire de abajo sale de la altura real de la barra más el sitio del botón + */
 .nx-num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
@@ -421,6 +425,37 @@ body.nx-on{background:var(--nx-bg)!important;color:var(--nx-ink);
  border:2.5px solid var(--nx-line2);border-top-color:var(--nx-brand);
  animation:nxgiro .8s linear infinite}
 @keyframes nxgiro{to{transform:rotate(360deg)}}
+
+
+/* ---------- selección múltiple en la bandeja ---------- */
+.nx-selbar{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 12px}
+.nx-selbar button{background:var(--nx-surf);border:1px solid var(--nx-line2);border-radius:20px;
+ padding:8px 13px;min-height:34px;font-size:11.5px;font-weight:600;color:var(--nx-ink)}
+.nx-selbar button.fin{color:var(--nx-mut)}
+.nx-selbar button:active{transform:scale(.97)}
+.nx-mail.sel{display:flex;align-items:flex-start;gap:11px;width:100%;text-align:left}
+.nx-mail.sel .tick{flex:0 0 auto;width:24px;height:24px;border-radius:7px;margin-top:2px;
+ border:1.5px solid var(--nx-line2);background:var(--nx-surf2);display:grid;place-items:center;
+ font-size:13px;font-weight:700;color:#fff}
+.nx-mail.sel.on{border-color:var(--nx-brand);box-shadow:0 0 0 2px rgba(0,99,109,.14)}
+.nx-mail.sel.on .tick{background:var(--nx-brand);border-color:var(--nx-brand)}
+.nx-mail.sel .cu{flex:1 1 auto;min-width:0;display:block}
+.nx-mail.sel .ln{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.nx-mail.sel .cp,.nx-mail.sel .fe{display:block}
+/* barra fija de acción cuando hay algo elegido */
+.nx-barra{position:fixed;left:0;right:0;bottom:0;z-index:58;max-width:520px;margin:0 auto;
+ /* la bandeja no es pantalla raíz: no hay barra de navegación debajo, así que
+    esta se pega al borde y solo respeta el área segura del iPhone */
+ display:flex;align-items:center;gap:11px;
+ padding:11px 16px calc(11px + env(safe-area-inset-bottom));
+ background:var(--nx-nav);backdrop-filter:saturate(180%) blur(12px);
+ -webkit-backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--nx-line)}
+.nx-barra span{flex:1 1 auto;font-size:12.5px;font-weight:600;color:var(--nx-mut)}
+.nx-barra button{flex:0 0 auto;border:0;border-radius:12px;padding:11px 15px;min-height:42px;
+ font-size:13px;font-weight:700;color:#fff;
+ background:linear-gradient(140deg,var(--nx-brand),#004a54)}
+.nx-barra button[disabled]{opacity:.45}
+.nx-scroll.conbarra{padding-bottom:calc(env(safe-area-inset-bottom) + 120px)}
 
 /* ---------- hoja inferior de selección ----------
    Antes el campo "Cuenta" era un botón que rotaba de opción en opción: no se

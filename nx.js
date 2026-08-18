@@ -104,6 +104,30 @@
  /* -------- hoja inferior para elegir de una lista --------
     Antes el campo "Cuenta" era un botón que rotaba de opción en opción y no
     se veía qué había disponible. Ahora abre la lista, como cualquier app. */
+ /* Los teclados (PIN, monto, pago) responden al APRETAR, no al click: en el
+    móvil el click llega ~300 ms después y cualquier cosa que lo cancele hace
+    perder el dígito. El guardia de 700 ms evita que el click posterior lo
+    repita, y el camino por click sigue vivo para teclado físico. */
+ function alToque(el,fn){
+  if(!el) return;
+  if(!window.PointerEvent){ el.addEventListener('click',()=>fn()); return; }
+  let tragarClick=false, limpiar=null;
+  el.addEventListener('pointerdown',ev=>{
+   if(ev.pointerType==='mouse' && ev.button!==0) return;
+   /* el click que viene detrás de este toque se descarta con una marca, no con
+      una ventana de tiempo: así los clicks de verdad (teclado, lector de
+      pantalla, pruebas) nunca se pierden aunque lleguen seguidos */
+   tragarClick=true;
+   clearTimeout(limpiar);
+   limpiar=setTimeout(()=>{ tragarClick=false; },900);
+   fn();
+  });
+  el.addEventListener('click',()=>{
+   if(tragarClick){ tragarClick=false; clearTimeout(limpiar); return; }
+   fn();
+  });
+ }
+
  function hoja(titulo,ops,sel,alElegir){
   const bg=$('nx-bg'), sh=$('nx-sheet');
   if(!bg||!sh) return;
@@ -428,7 +452,7 @@
   const box=$('nxLogin');
   const pinta_=()=>box.querySelectorAll('.nx-dots i').forEach((d,i)=>d.classList.toggle('f',i<pinBuf.length));
   const msg=t=>{ $('nxPinMsg').textContent=t||''; };
-  box.querySelectorAll('button[data-d]').forEach(b=>b.onclick=async()=>{
+  box.querySelectorAll('button[data-d]').forEach(b=>alToque(b,async()=>{
    if(pinBuf.length>=4) return;
    vib(9); pinBuf+=b.dataset.d; pinta_(); msg('');
    if(pinBuf.length<4) return;
@@ -445,7 +469,7 @@
     else { vib([12,55,12]); box.classList.add('err'); msg('No coincide, empecemos de nuevo');
       setTimeout(()=>{ box.classList.remove('err'); pinBuf=''; pinModo='nuevo'; pinta(1); },800); }
    }
-  });
+  }));
   $('nxPinDel').onclick=()=>{ pinBuf=pinBuf.slice(0,-1); pinta_(); msg(''); };
   const can=$('nxPinCan'); if(can) can.onclick=()=>{ pinBuf=''; pinModo='abrir'; go('perfil'); };
   const out=$('nxPinOut'); if(out) out.onclick=()=>{
@@ -625,7 +649,7 @@
    reg.tipo=b.dataset.t; vib(8); pinta(1); });
   document.querySelectorAll('#nx-body .nx-cat[data-c]').forEach(b=>b.onclick=()=>{
    reg.catId=+b.dataset.c; vib(8); pinta(1); });
-  document.querySelectorAll('#nx-body .nx-pad button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#nx-body .nx-pad button').forEach(b=>alToque(b,()=>{
    const n=b.dataset.n; vib(6);
    if(n==='del') reg.monto=reg.monto.slice(0,-1);
    else if(n==='.'){ if(reg.monto.indexOf('.')<0) reg.monto=(reg.monto||'0')+'.'; }
@@ -636,7 +660,7 @@
    const num=parseFloat(reg.monto)||0;
    v.innerHTML='<small>S/</small>'+num.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
    $('nxSave').disabled=!(num>0);
-  });
+  }));
   const de=$('nxDesc'); if(de) de.oninput=()=>{ reg.desc=de.value; };
   /* si en una pantalla chica la zona de campos no cabe, se marca como scrolleable
      para que el último campo se desvanezca en vez de aparecer cortado */
@@ -1053,7 +1077,7 @@
    if(t==='c'){ const c=(S.tarjetas||[]).find(x=>x.id===+id); if(c) s=cardMonthStatus(c,m.y,m.mn).falta; }
    else { const l=(S.loans||[]).find(x=>x.id===+id); if(l) s=loanMonthStatus(l,m.y,m.mn).falta; }
    pagoMonto=s.toFixed(2); vib(8); pinta(1); };
-  document.querySelectorAll('#nx-body .nx-pad button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#nx-body .nx-pad button').forEach(b=>alToque(b,()=>{
    const n=b.dataset.n; vib(6);
    if(n==='del') pagoMonto=pagoMonto.slice(0,-1);
    else if(n==='.'){ if(pagoMonto.indexOf('.')<0) pagoMonto=(pagoMonto||'0')+'.'; }
@@ -1063,7 +1087,7 @@
    $('nx-body').querySelector('.nx-amt .v').innerHTML='<small>S/</small>'+
      num.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
    $('nxPG').disabled=!(num>0);
-  });
+  }));
   $('nxPG').onclick=()=>{
    const mo=parseFloat(pagoMonto)||0; if(!(mo>0)) return;
    /* mismos campos que usa la app de siempre, y su propia addCardPayment() */
@@ -1864,6 +1888,10 @@
 
  /* elecciones que él cambia antes de anotar: {catId, destino} por id de correo */
  let bndEleccion={};
+ /* Selección múltiple para limpiar de golpe lo que ya revisó por su cuenta. */
+ let bndModo=false, bndSel={};
+ const bndSelN=()=>Object.keys(bndSel).filter(k=>bndSel[k]).length;
+ const bndLimpiarSel=()=>{ bndModo=false; bndSel={}; };
  const eleccionDe=m=>{
   if(!bndEleccion[m.id]) bndEleccion[m.id]={catId:catCorreo(m), dest:destinoCorreo(m)};
   return bndEleccion[m.id];
@@ -1911,6 +1939,28 @@
     body:JSON.stringify({action:'archivar',ids:ids}),redirect:'follow'}).catch(()=>{});
  }
 
+ /** Marca varios como vistos: no anota nada y no vuelven a aparecer. */
+ function verVarios(ids){
+  if(!ids.length) return;
+  const antesVistos=(bndVistos()||[]).slice();
+  const guardados=bnd.items.filter(m=>ids.indexOf(m.id)>=0);
+  vib(14);
+  archivarCorreos(ids);
+  bnd.items=bnd.items.filter(m=>ids.indexOf(m.id)<0);
+  bndCache().n=bnd.items.length;
+  bndLimpiarSel();
+  try{ persist(); }catch(e){}
+  pinta(0);
+  toast(ids.length===1?'Marcado como visto':ids.length+' marcados como vistos',
+    'No se anotó ninguno',()=>{
+     S.cfg.correosVistos=antesVistos;
+     try{ persist(); }catch(e){}
+     bnd.items=guardados.concat(bnd.items);
+     bndCache().n=bnd.items.length;
+     pinta(0); toast('Vuelven a la bandeja','',null);
+    });
+ }
+
  const ICO_BANCO={'BCP':'🔵','Yape':'🟣','Interbank':'🟢'};
 
  P.bandeja={html(){
@@ -1954,6 +2004,17 @@
   const fila=m=>{
    const e=eleccionDe(m), cat=catById(e.catId);
    const esTras=m.tipo==='Traslado';
+   if(bndModo){                                   /* eligiendo varios */
+    const on=!!bndSel[m.id];
+    return '<button class="nx-mail sel'+(on?' on':'')+'" data-sel="'+h(m.id)+'" '+
+     'data-k="'+h(m.id)+'" type="button">'+
+     '<span class="tick">'+(on?'✓':'')+'</span>'+
+     '<span class="cu"><span class="ln"><span class="b">'+(ICO_BANCO[m.banco]||'🏦')+' '+h(m.banco)+
+       (esTras?' · traslado':'')+'</span><b class="mo">'+fmt2(m.monto)+'</b></span>'+
+      '<span class="cp">'+h(m.concepto||'Movimiento')+'</span>'+
+      '<span class="fe">'+etiquetaFecha(m.fecha)+'</span></span>'+
+     '</button>';
+   }
    return '<div class="nx-mail" data-k="'+h(m.id)+'">'+
     '<div class="ln"><span class="b">'+(ICO_BANCO[m.banco]||'🏦')+' '+h(m.banco)+'</span>'+
      '<b class="mo">'+fmt2(m.monto)+'</b></div>'+
@@ -1979,24 +2040,60 @@
        '<button class="no" data-no="'+h(m.id)+'">Descartar</button></div>')+
     '</div>';
   };
-  return cab+'<div class="nx-scroll">'+
+  const n=bndSelN();
+  return cab+'<div class="nx-scroll'+(bndModo?' conbarra':'')+'">'+
    (bnd.items.length===0
     ? '<div class="nx-empty">Nada nuevo en tus correos de los últimos '+bnd.dias+' días.</div>'
-    : '<div class="nx-tip"><span>👀</span><span>Revisa cada uno antes de anotarlo: la categoría y la '+
-      'cuenta vienen propuestas, tócalas para cambiarlas.</span></div>'+
+    : (bndModo
+       ? '<div class="nx-tip"><span>☑️</span><span>Toca los que ya revisaste por tu cuenta y márcalos '+
+         'como <b>vistos</b>: no se anota nada y dejan de aparecer.</span></div>'
+       : '<div class="nx-tip"><span>👀</span><span>Revisa cada uno antes de anotarlo: la categoría y la '+
+         'cuenta vienen propuestas, tócalas para cambiarlas.</span></div>')+
+      '<div class="nx-selbar">'+
+       (bndModo
+        ? '<button id="nxSelTodo">Todos ('+bnd.items.length+')</button>'+
+          (tras.length?'<button id="nxSelTras">Solo traslados ('+tras.length+')</button>':'')+
+          '<button id="nxSelNada">Ninguno</button>'+
+          '<button id="nxSelFin" class="fin">Salir</button>'
+        : '<button id="nxSelIni">Marcar varios como vistos</button>')+
+      '</div>'+
       (gastos.length?gastos.map(fila).join(''):'')+
       (tras.length?'<div class="nx-st" style="margin-top:14px"><h3>Traslados</h3>'+
         '<span style="font-size:12px;color:var(--nx-mut)">no son gastos</span></div>'+
         tras.map(fila).join(''):''))+
    '<button class="nx-go sec" id="nxBndLeer" style="margin-top:14px">Volver a leer los correos</button>'+
    '<button class="nx-go sec" id="nxBndMas" style="margin-top:9px">Mirar 60 días atrás</button>'+
-   '</div>';
+   '</div>'+
+   (bndModo
+    ? '<div class="nx-barra"><span>'+(n?n+' elegido'+(n===1?'':'s'):'Ninguno elegido')+'</span>'+
+      '<button id="nxSelOk"'+(n?'':' disabled')+'>Marcar como visto</button></div>'
+    : '');
  },wire(){
   if(bnd.fase==='cargando') contadorOn();
   const leer=$('nxBndLeer');
-  if(leer) leer.onclick=()=>{ vib(8); const q=traerBandeja(); pinta(0); q.then(()=>pinta(0)); };
+  if(leer) leer.onclick=()=>{ vib(8); bndLimpiarSel(); const q=traerBandeja(); pinta(0); q.then(()=>pinta(0)); };
   const mas=$('nxBndMas');
   if(mas) mas.onclick=()=>{ vib(8); bnd.dias=60; const q=traerBandeja(); pinta(0); q.then(()=>pinta(0)); };
+
+  const ini=$('nxSelIni'); if(ini) ini.onclick=()=>{ vib(8); bndModo=true; bndSel={}; pinta(0); };
+  const fin=$('nxSelFin'); if(fin) fin.onclick=()=>{ vib(8); bndLimpiarSel(); pinta(0); };
+  const todo=$('nxSelTodo'); if(todo) todo.onclick=()=>{ vib(8);
+   bnd.items.forEach(m=>bndSel[m.id]=true); pinta(0); };
+  const stras=$('nxSelTras'); if(stras) stras.onclick=()=>{ vib(8);
+   bndSel={}; bnd.items.filter(m=>m.tipo==='Traslado').forEach(m=>bndSel[m.id]=true); pinta(0); };
+  const nada=$('nxSelNada'); if(nada) nada.onclick=()=>{ vib(8); bndSel={}; pinta(0); };
+  document.querySelectorAll('#nx-body [data-sel]').forEach(b=>b.onclick=()=>{
+   const k=b.dataset.sel; bndSel[k]=!bndSel[k]; vib(6); pinta(0); });
+  const selOk=$('nxSelOk');
+  if(selOk) selOk.onclick=()=>{
+   const ids=Object.keys(bndSel).filter(k=>bndSel[k]);
+   if(!ids.length) return;
+   const suma=bnd.items.filter(m=>ids.indexOf(m.id)>=0).reduce((a,m)=>a+(+m.monto||0),0);
+   confirmar({titulo:'¿Marcar '+ids.length+' como vistos?',boton:'Sí, marcarlos',
+     detalle:'<div>Suman '+fmt2(suma)+', pero <b>no se anota ninguno</b>: solo dejan de aparecer '+
+      'en la bandeja. Tus totales no cambian. Queda un "Deshacer" por si te arrepientes.</div>'},
+     ()=>verVarios(ids));
+  };
 
   document.querySelectorAll('#nx-body [data-cat]').forEach(b=>b.onclick=()=>{
    const m=bnd.items.find(x=>x.id===b.dataset.cat); if(!m) return;
@@ -2233,16 +2330,16 @@
  }
 
  function sinZoom(){
-  /* Se le acercaba la pantalla sin querer con gestos. Safari en iOS ignora
-     user-scalable=no, así que además se frenan la pinza y el doble toque. */
+  /* Se le acercaba la pantalla sin querer con la pinza: eso se frena aquí.
+     OJO — BUG QUE REPORTÓ: antes también cancelaba el `touchend` cuando dos
+     toques caían a menos de 320 ms, para matar el doble-toque-para-acercar.
+     Cancelar touchend CANCELA EL CLICK, así que al teclear rápido el PIN o un
+     monto se perdían dígitos y había que tocar dos veces. Se quitó: el doble
+     toque ya lo bloquean `touch-action:manipulation` y el viewport. */
   ['gesturestart','gesturechange','gestureend'].forEach(ev=>
    document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
-  let ultimo=0;
-  document.addEventListener('touchend',e=>{
-   const t=Date.now(); if(t-ultimo<=320 && e.cancelable) e.preventDefault(); ultimo=t;
-  },{passive:false});
   document.addEventListener('touchmove',e=>{
-   if(e.touches.length>1 && e.cancelable) e.preventDefault();
+   if(e.touches.length>1 && e.cancelable) e.preventDefault();   // pinza con dos dedos
   },{passive:false});
  }
 
