@@ -62,6 +62,28 @@ const REMITENTES = [
   'bancoripley@notificaciones.bancoripley.com.pe'
 ];
 
+/**
+ * De que cuenta habla un lado de un traslado. Devuelve un token que la app
+ * sabe resolver: 'wardadito:Viaje' o 'cta:2033'.
+ *
+ * Los dos formatos que manda el BCP, tal cual llegan:
+ *   Origen  | Wardadito Viaje
+ *   Destino | AHOR. *************029
+ * y en las transferencias entre cuentas, solo los ultimos digitos.
+ *
+ * Se devuelve un token y no un id porque aqui no se sabe que cuentas tiene
+ * el en la app: eso lo resuelve ella, que ademas aprende el digito la
+ * primera vez que el lo elige a mano.
+ */
+function ladoTraslado_(txt) {
+  const s = String(txt || '').trim();
+  if (!s) return '';
+  const w = s.match(/wardadito\s+(.+?)\s*$/i);
+  if (w) return 'wardadito:' + w[1].trim();
+  const d = s.match(/(\d{3,4})\s*$/);
+  return d ? 'cta:' + d[1] : '';
+}
+
 /** Como escriben el numero de operacion los correos que llegan. */
 const NUM_OP = 'N[uú]mero de operaci[oó]n|N[º°o]\\.? de operaci[oó]n';
 
@@ -178,6 +200,7 @@ function interpretar_(m) {
     monto: 0,
     concepto: '',
     medio: '',         // 'credito-bcp' | 'debito-bcp' | 'cuenta-bcp' | 'yape' | 'interbank'
+    de: '', a: '',     // extremos de un Traslado: 'cta:2033' | 'wardadito:Viaje'
     tipo: 'Gasto',
     banco: '',
     detalle: asunto
@@ -350,6 +373,10 @@ function interpretar_(m) {
       base.concepto = (esRetiro ? 'Retiro de wardadito' : 'Aporte a wardadito') +
                       (bolsillo ? ' ' + titulo_(bolsillo.trim()) : '');
       base.entra = esRetiro;            // true = la plata vuelve a la cuenta
+      /* los dos extremos, para que la app mueva las DOS cuentas y no solo
+         descarte el correo como hacia antes */
+      base.de = ladoTraslado_(campo_(t, 'Origen'));
+      base.a  = ladoTraslado_(campo_(t, 'Destino'));
       base.fecha = fechaBcpLarga_(campo_(t, 'Fecha y hora')) || fechaDe_(m);
       base.id = 'bcp-' + (numOp_(t1, NUM_OP) || m.getId());
       return base;
@@ -363,8 +390,21 @@ function interpretar_(m) {
       base.concepto = /yapeo/i.test(t) ? 'Yapeo a celular'
                     : /transferencia/i.test(t) ? 'Transferencia entre cuentas'
                     : /retiro/i.test(t) ? 'Retiro de efectivo' : 'Operación BCP';
-      // una transferencia entre cuentas propias no es gasto: se marca aparte
-      if (/Entre mis Cuentas/i.test(asunto)) base.tipo = 'Traslado';
+      /* una transferencia entre cuentas propias no es gasto: se marca aparte.
+         El correo trae los dos extremos al final, asi:
+           Desde *Clasica*
+           **** 2033 Enviado a *Clasica*
+           **** 5018
+         Las dos cuentas suelen llamarse igual ("Clasica"), asi que lo unico
+         que las distingue son los ultimos digitos.
+         OJO: para cuando se lee esto, limpiar_() ya cambio CADA asterisco por
+         un espacio, asi que el patron no puede apoyarse en ellos. Ahi se me
+         fue la primera version. */
+      if (/Entre mis Cuentas/i.test(asunto)) {
+        base.tipo = 'Traslado';
+        const ex = t.match(/Desde\s[^\d]{0,40}(\d{3,4})\s+Enviado a\s[^\d]{0,40}(\d{3,4})/i);
+        if (ex) { base.de = 'cta:' + ex[1]; base.a = 'cta:' + ex[2]; }
+      }
       base.fecha = fechaBcpLarga_(campo_(t, 'Fecha y hora')) || fechaDe_(m);
       base.id = 'bcp-' + (numOp_(t1, NUM_OP) || m.getId());
       return base;
