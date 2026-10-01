@@ -420,6 +420,17 @@ Empresa: *Claro* Servicio: Postpago`,'r12','2026-08-13T04:25:29Z'),
  {fecha:'2026-09-30',monto:250,tipo:'Traslado',entra:true,
   de:'wardadito:Viaje',a:'cta:333',concepto:'Retiro de wardadito Viaje'}],
 
+
+// V18. Interbank: constancia de Pago Plin. Es el correo mas frecuente que le
+//      manda Interbank y NINGUNO se leia: la etiqueta dice "Monto y moneda",
+//      al reves que en las demas constancias, y el patron pedia "Moneda y monto".
+//      Llegaban como "No reconocido" con S/ 0.00.
+[msg('servicioalcliente@netinterbank.com.pe','Constancia de Pago Plin',
+` Interbank | Constancia de Pago Plin\n\n| |\n| Hola, PERSONA, te enviamos tu Constancia de Pago Plin |\n| Te enviamos el detalle de tu operación |\n| Código de operación | 61111163 |\n| Fecha y hora | 26 Sep 2026 03:23 PM |\n| Cuenta cargo | Cuenta Simple Soles 111 1111111111 |\n| Destinatario | PERSONA DOS DEMO |\n| Destino | Plin |\n| Monto y moneda | S/ 150.00 |`,
+ 'v18','2026-09-26T20:23:42Z'),
+ {fecha:'2026-09-26',monto:150,medio:'interbank',banco:'Interbank',
+  tipo:'Gasto',concepto:'Plin a Persona Dos Demo',id:'ibk-61111163'}],
+
 ];
 
 

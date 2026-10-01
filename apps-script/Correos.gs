@@ -233,8 +233,12 @@ function interpretar_(m) {
   /* -------------------------- Interbank ------------------------ */
   if (de.indexOf('netinterbank') >= 0) {
     base.banco = 'Interbank'; base.medio = 'interbank';
-    // ojo: puede traer dos líneas de monto (soles y dólares). Tomamos SOLES.
-    const mm = t1.match(/Moneda y monto\s*\|?\s*S\/\s*([\d.,]+)/i) ||
+    /* ojo: puede traer dos líneas de monto (soles y dólares). Tomamos SOLES.
+       Y la etiqueta cambia según el correo: las constancias de Plin dicen
+       "Monto y moneda", al revés que las demás. Por eso sus 17 pagos por Plin
+       de las últimas tres semanas entraban como "No reconocido" con S/ 0.00:
+       el correo llegaba bien, nadie le sacaba la cifra. */
+    const mm = t1.match(/(?:Monto y moneda|Moneda y monto)\s*\|?\s*S\/\s*([\d.,]+)/i) ||
                t1.match(/Recibo\s*1\s*S\/\s*([\d.,]+)/i) ||
                t1.match(/(?:Monto|Importe)(?: pagado| total)?\s*:?\s*S\/\s*([\d.,]+)/i);
     if (!mm) return null;
@@ -243,12 +247,16 @@ function interpretar_(m) {
     const tar = campo_(t, 'Tarjeta de crédito');
     base.concepto = titulo_(emp) || (tar ? 'Pago tarjeta Interbank' : 'Pago Interbank');
     if (tar) base.tipo = 'Pago de deuda';
-    if (/Plin/i.test(asunto)) base.concepto = 'Plin';
+    if (/Plin/i.test(asunto)) {
+      /* a quién le pagó vale mucho más que la palabra "Plin" repetida 17 veces */
+      const quien = campo_(t, 'Destinatario');
+      base.concepto = quien ? 'Plin a ' + titulo_(quien) : 'Plin';
+    }
     base.fecha = fechaIbk_(campo_(t, 'Fecha y hora')) || fechaDe_(m);
     const op = numOp_(t1, 'C[oó]digo de operaci[oó]n|' + NUM_OP);
     base.id = 'ibk-' + (op || m.getId());
     // guardamos el monto en dólares como aviso, no como movimiento
-    const usd = t1.match(/Moneda y monto\s*\|?\s*US\$\s*([\d.,]+)/i);
+    const usd = t1.match(/(?:Monto y moneda|Moneda y monto)\s*\|?\s*US\$\s*([\d.,]+)/i);
     if (usd) base.avisoUsd = num_(usd[1]);
     return base;
   }
