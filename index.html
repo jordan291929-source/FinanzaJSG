@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="fonts/inter.css">
-<link rel="stylesheet" href="nx.css?v=484">
+<link rel="stylesheet" href="nx.css?v=485">
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
@@ -1037,7 +1037,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='4.8.4'; // se actualiza con cada mejora del sistema
+const APP_VERSION='4.8.5'; // se actualiza con cada mejora del sistema
 /* un `const` de nivel superior NO queda en window, y por eso la versión salía
    vacía en Perfil y en Acerca de. Se expone a mano. */
 window.APP_VERSION=APP_VERSION;
@@ -1326,7 +1326,11 @@ function editMov(id){const t=S.tx.find(x=>x.id===id);if(!t)return;editId=id;docu
  if(t.cardId&&t.compraId){const cd=S.tarjetas.find(c=>c.id===t.cardId);const cp=cd&&(cd.compras||[]).find(p=>p.id===t.compraId);if(cp){document.getElementById('mCuotas').value=cp.n;document.getElementById('mTea').value=((cp.tea||0)*100).toFixed(1);}}
  document.getElementById('mConcepto').value=t.concepto;document.getElementById('mMonto').value=t.monto;document.getElementById('movBtn').textContent='Guardar';document.getElementById('movCancel').style.display='';window.scrollTo({top:0,behavior:'smooth'});}
 function cancelEdit(){editId=null;document.getElementById('movBtn').textContent='Agregar';document.getElementById('movCancel').style.display='none';document.getElementById('mConcepto').value='';document.getElementById('mMonto').value='';}
-function delMov(id){const t=S.tx.find(x=>x.id===id);if(t&&t.cardId&&t.compraId)rmCompra(t.cardId,t.compraId);S.tx=S.tx.filter(x=>x.id!==id);save();}
+function delMov(id){const t=S.tx.find(x=>x.id===id);if(t&&t.cardId&&t.compraId)rmCompra(t.cardId,t.compraId);
+ /* un traslado son dos movimientos: borrar uno solo dejaria una cuenta de mas
+    y la otra de menos, para siempre. Se van los dos. */
+ const par=t&&t.parTras;
+ S.tx=S.tx.filter(x=>x.id!==id&&!(par&&x.parTras===par));save();}
 function quickFav(id){const fv=(S.favoritos||[]).find(x=>x.id===id);if(!fv)return;S.tx.push({id:newId(),fecha:keyOf(new Date()),tipo:'Gasto',catId:fv.catId,cuentaId:fv.cuentaId||null,concepto:fv.concepto,monto:+fv.monto||0});S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));save();}
 function renderMov(){
  const opts=catOptions();['mCat','fvCat','rcCat'].forEach(id=>{const e=document.getElementById(id);if(e){const cur=e.value;e.innerHTML=opts;if(cur)e.value=cur;}});
@@ -1556,6 +1560,27 @@ function addCuadreDeuda(sel,monto,fecha){
    catId:cat?cat.id:null,cuentaId:null,concepto:'Cuadre · '+nombre,monto:mo,cuadre:'deuda'},extra);
  S.tx.push(t);S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));save();
  return t;}
+
+/** Mover plata de un bolsillo a otro: baja una cuenta y sube la otra.
+    Van DOS movimientos, no uno, porque las dos cuentas tienen que moverse.
+    Los dos llevan cuadre:'traslado', asi que ninguno cuenta como gasto ni como
+    ingreso del mes; y como uno resta y el otro suma, tu plata total no se mueve
+    ni un sol. Quedan atados por parTras: borrar uno borra el otro, porque medio
+    traslado deja las dos cuentas mintiendo. */
+function addTraslado(deId,aId,monto,fecha,concepto,correoK){
+ const mo=Math.round((parseFloat(monto)||0)*100)/100;
+ const a=+deId||0, b=+aId||0;
+ if(!(mo>0)||!a||!b||a===b) return null;
+ const cde=ctaById(a), cha=ctaById(b);
+ if(!cde||!cha) return null;
+ const f=fecha||keyOf(new Date());
+ const rot=concepto||('Traslado · '+cde.nombre+' → '+cha.nombre);
+ const par=newId();
+ const sale ={id:par,  fecha:f,tipo:'Gasto',  catId:null,cuentaId:a,concepto:rot,monto:mo,cuadre:'traslado',parTras:par};
+ const entra={id:par+1,fecha:f,tipo:'Ingreso',catId:null,cuentaId:b,concepto:rot,monto:mo,cuadre:'traslado',parTras:par};
+ if(correoK){ sale.correoK=correoK; entra.correoK=correoK; }
+ S.tx.push(sale,entra);S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));save();
+ return {sale:sale,entra:entra,par:par};}
 
 /** Lo que se lleva cuadrado en el mes. La portada lo usa para avisarle cuando
     deja de ser ruido: cuadrar 20 es normal, cuadrar 200 todos los meses es que
@@ -3165,6 +3190,6 @@ addEventListener('load',()=>{
  try{ pintarTodo(); }catch(e){ console.warn('v3.6.0:',e); }
 })();
 </script>
-<script src="nx.js?v=484"></script>
+<script src="nx.js?v=485"></script>
 </body>
 </html>

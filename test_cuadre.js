@@ -13,7 +13,7 @@ const NOMBRES = ['pad','daysIn','keyOf','newId','monthNum','inMonth','catById','
  'loanPaidTot','loanCuotasPagadas','loanRem','loanCuotaMes','loanCumSched','loanMonthStatus',
  'cuotasMes','deudaTotal','gastoMes','gastoMesExacto','gastoMesEstimado','gastoDia',
  'cashOutMes','ingresoRealMes','saldoHasta','saldoHastaExacto','saldoCuenta','bucketReal',
- 'addCuadreCaja','addCuadreDeuda','cuadreMes'];
+ 'addCuadreCaja','addCuadreDeuda','cuadreMes','rmCompra','delMov','addTraslado'];
 
 function motor() {
   const out = [];
@@ -132,6 +132,41 @@ const chk = (q, real, esp) => {
     S.tx.push({id: 9, fecha: '2026-10-08', tipo: 'Gasto', catId: 1, cuentaId: 2, concepto: 'Menú', monto: 10});
     return r2(a - m.saldoCuenta(2));
   })(), 10);
+}
+
+/* ---------- 5. traslado entre cuentas: dos movimientos, un solo hecho ---------- */
+{
+  const S = base(), m = cargar(S);
+  S.cuentas.push({id: 4, nombre: 'Wardadito Viaje'});
+  const totalA = m.saldoHasta(2026, 10);
+
+  const r = m.addTraslado(2, 4, 500, '2026-10-05');
+  chk('crea los dos movimientos', !!(r && r.sale && r.entra), true);
+  chk('el de salida es Gasto', r.sale.tipo, 'Gasto');
+  chk('el de entrada es Ingreso', r.entra.tipo, 'Ingreso');
+  chk('los dos quedan atados', r.sale.parTras === r.entra.parTras, true);
+
+  chk('baja la cuenta de origen', m.saldoCuenta(2), 218.92 - 500);
+  chk('sube la cuenta de destino', m.saldoCuenta(4), 500);
+  chk('tu plata total NO se mueve', m.saldoHasta(2026, 10), totalA);
+  chk('NO cuenta como gasto del mes', m.gastoMes(2026, 10), 20);
+  chk('NO cuenta como ingreso del mes', m.ingresoRealMes(2026, 10), 0);
+  chk('NO se come ningún límite', m.bucketReal(2026, 10).Necesidad, 20);
+
+  /* medio traslado deja las dos cuentas mintiendo: borrar uno borra el otro */
+  m.delMov(r.sale.id);
+  chk('borrar uno borra los dos', S.tx.filter(t => t.parTras === r.par).length, 0);
+  chk('el origen vuelve a su saldo', m.saldoCuenta(2), 218.92);
+  chk('el destino vuelve a cero', m.saldoCuenta(4), 0);
+}
+
+/* ---------- 6. lo que un traslado nunca debe aceptar ---------- */
+{
+  const S = base(), m = cargar(S);
+  chk('no acepta la misma cuenta a ambos lados', m.addTraslado(2, 2, 100, '2026-10-05'), null);
+  chk('no acepta monto cero', m.addTraslado(2, 3, 0, '2026-10-05'), null);
+  chk('no acepta una cuenta que no existe', m.addTraslado(2, 99, 100, '2026-10-05'), null);
+  chk('no deja movimientos sueltos tras rechazar', S.tx.length, 2);
 }
 
 console.log('');

@@ -387,6 +387,50 @@ Empresa: *Claro* Servicio: Postpago`,'r12','2026-08-13T04:25:29Z'),
  {fecha:'2026-08-18',monto:0,montoUsd:24.46,moneda:'USD',medio:'credito-bcp',
   tipo:'Gasto',id:'bcp-0000111009'}],
 
+
+/* ===================================================================
+   CASOS REALES v4 — los dos extremos de un traslado.
+   Formato copiado de sus correos; los digitos de cuenta son inventados.
+   Antes estos tres se mostraban y se descartaban: el total quedaba bien
+   pero el saldo de cada cuenta se iba descuadrando solo.
+   =================================================================== */
+
+// V15. BCP: transferencia entre sus propias cuentas. Las dos se llaman igual
+//      ("Clasica"), asi que lo unico que las distingue son los ultimos digitos.
+[msg('notificaciones@notificacionesbcp.com.pe',
+ 'Constancia de Transferencia Entre mis Cuentas - Servicio de Notificaciones BCP',
+`Hola *Persona Uno Demo,*\n\nRealizaste una transferencia de *S/ 200.00* desde tu *Clasica.*\n\nPor tu seguridad, te enviamos los *datos de tu operación.*\n\n*Montos*\n\nMonto transferido *S/ 200.00* Tipo de cambio ** *Total cobrado al tipo de cambio* **\n\n*Datos de la operación*\n\nOperación realizada *Transferencia entre mis cuentas* Fecha y hora *30 de Septiembre de 2026 - 06:30 PM* Enviado a **\n**** 1111\n Desde *Clasica*\n**** 2222\n Desde *Clasica*\n**** 2222 Enviado a *Clasica*\n**** 1111 Mensaje ** Canal *Banca Móvil BCP* Número de operación *06111112*\n\n**`,
+ 'v15','2026-09-30T23:30:57Z'),
+ {fecha:'2026-09-30',monto:200,tipo:'Traslado',medio:'cuenta-bcp',
+  de:'cta:2222',a:'cta:1111',id:'bcp-06111112'}],
+
+// V16. wardadito: un aporte SALE de la cuenta y entra al bolsillo
+[msg('notificaciones@notificacionesbcp.com.pe',
+ 'Realizaste un aporte voluntario a tu wardadito.',
+`| |\n| Hola Persona, Realizaste un aporte voluntario de S/ 500.00 a tu wardadito Viaje. Te enviamos los datos de tu operación. |\n| Montos |\n| Total aportado | S/ 500.00 |\n| Datos de la operación |\n| Operación realizada | Aporte voluntario |\n| Fecha y hora | 30 de setiembre de 2026 - 18:31:10 |\n| Origen | AHOR. *************333 |\n| Destino | Wardadito Viaje |`,
+ 'v16','2026-09-30T23:31:11Z'),
+ {fecha:'2026-09-30',monto:500,tipo:'Traslado',entra:false,
+  de:'cta:333',a:'wardadito:Viaje',concepto:'Aporte a wardadito Viaje'}],
+
+// V17. el mismo bolsillo al reves: un retiro DEVUELVE la plata a la cuenta
+[msg('notificaciones@notificacionesbcp.com.pe',
+ 'Realizaste un retiro de tu wardadito.',
+`| |\n| Hola Persona, Realizaste un retiro de S/ 250.00 en tu wardadito Viaje. Te enviamos los datos de tu operación. |\n| Montos |\n| Total retirado | S/ 250.00 |\n| Datos de la operación |\n| Operación realizada | Retiro |\n| Fecha y hora | 30 de setiembre de 2026 - 09:55:35 |\n| Origen | Wardadito Viaje |\n| Destino | AHOR. *************333 |`,
+ 'v17','2026-09-30T14:55:35Z'),
+ {fecha:'2026-09-30',monto:250,tipo:'Traslado',entra:true,
+  de:'wardadito:Viaje',a:'cta:333',concepto:'Retiro de wardadito Viaje'}],
+
+
+// V18. Interbank: constancia de Pago Plin. Es el correo mas frecuente que le
+//      manda Interbank y NINGUNO se leia: la etiqueta dice "Monto y moneda",
+//      al reves que en las demas constancias, y el patron pedia "Moneda y monto".
+//      Llegaban como "No reconocido" con S/ 0.00.
+[msg('servicioalcliente@netinterbank.com.pe','Constancia de Pago Plin',
+` Interbank | Constancia de Pago Plin\n\n| |\n| Hola, PERSONA, te enviamos tu Constancia de Pago Plin |\n| Te enviamos el detalle de tu operación |\n| Código de operación | 61111163 |\n| Fecha y hora | 26 Sep 2026 03:23 PM |\n| Cuenta cargo | Cuenta Simple Soles 111 1111111111 |\n| Destinatario | PERSONA DOS DEMO |\n| Destino | Plin |\n| Monto y moneda | S/ 150.00 |`,
+ 'v18','2026-09-26T20:23:42Z'),
+ {fecha:'2026-09-26',monto:150,medio:'interbank',banco:'Interbank',
+  tipo:'Gasto',concepto:'Plin a Persona Dos Demo',id:'ibk-61111163'}],
+
 ];
 
 
