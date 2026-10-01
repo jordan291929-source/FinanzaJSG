@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="fonts/inter.css">
-<link rel="stylesheet" href="nx.css?v=482">
+<link rel="stylesheet" href="nx.css?v=484">
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
@@ -1037,7 +1037,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='4.8.2'; // se actualiza con cada mejora del sistema
+const APP_VERSION='4.8.4'; // se actualiza con cada mejora del sistema
 /* un `const` de nivel superior NO queda en window, y por eso la versión salía
    vacía en Perfil y en Acerca de. Se expone a mano. */
 window.APP_VERSION=APP_VERSION;
@@ -1180,10 +1180,23 @@ function cuotasMes(y,mn){let t=0;S.tarjetas.forEach(c=>t+=cardPayMonth(c,y,mn));
 /* ---------- movimientos / agregaciones ---------- */
 const inMonth=(t,y,mn)=>{const d=new Date(t.fecha+'T00:00');return d.getFullYear()===y&&d.getMonth()+1===mn;};
 const esDeuda=t=>{const c=catById(t.catId);return !!(c&&c.auto==='deuda');}; // pago de deuda (no es consumo nuevo)
-function gastoMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esDeuda(t)).reduce((a,b)=>a+(+b.monto||0),0);}
-function cashOutMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!t.cardId).reduce((a,b)=>a+(+b.monto||0),0);}
-function ingresoRealMes(y,mn){return S.tx.filter(t=>t.tipo==='Ingreso'&&inMonth(t,y,mn)).reduce((a,b)=>a+(+b.monto||0),0);}
-function saldoHasta(y,mn){const end=monthNum(y,mn);let s=+S.cfg.saldoIni||0;S.tx.forEach(t=>{const d=new Date(t.fecha+'T00:00');if(monthNum(d.getFullYear(),d.getMonth()+1)<=end){if(t.tipo==='Ingreso')s+=+t.monto||0;else if(!t.cardId)s-=+t.monto||0;}});return s;}
+/* ---------- cuadre: corregir sin mentir ----------
+   Cuando lo anotado y la realidad se separan (pagó antes del corte, pagó en
+   efectivo, el banco cobró una comisión que nadie anotó), hace falta corregir
+   SIN que la corrección se disfrace de gasto: si entra como gasto normal se
+   come el límite de una categoría e infla el mes, y el presupuesto empieza a
+   mentir justo cuando uno trataba de arreglarlo.
+     cuadre:'caja'  → mueve el saldo de una cuenta, no es gasto ni ingreso.
+     cuadre:'deuda' → baja una deuda y NO toca la caja (la plata ya salió antes).
+   Ningún cuadre cuenta en el gasto del mes, en el 50/30/20 ni en los límites
+   por categoría. Se ven en Movimientos, a propósito: tapar cuánto se cuadra
+   sería esconder el síntoma. */
+function esCuadre(t){return !!(t&&t.cuadre);}
+function cuadreSinCaja(t){return !!(t&&t.cuadre==='deuda');}
+function gastoMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esDeuda(t)&&!esCuadre(t)).reduce((a,b)=>a+(+b.monto||0),0);}
+function cashOutMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!t.cardId&&!cuadreSinCaja(t)).reduce((a,b)=>a+(+b.monto||0),0);}
+function ingresoRealMes(y,mn){return S.tx.filter(t=>t.tipo==='Ingreso'&&inMonth(t,y,mn)&&!esCuadre(t)).reduce((a,b)=>a+(+b.monto||0),0);}
+function saldoHasta(y,mn){const end=monthNum(y,mn);let s=+S.cfg.saldoIni||0;S.tx.forEach(t=>{if(cuadreSinCaja(t))return;const d=new Date(t.fecha+'T00:00');if(monthNum(d.getFullYear(),d.getMonth()+1)<=end){if(t.tipo==='Ingreso')s+=+t.monto||0;else if(!t.cardId)s-=+t.monto||0;}});return s;}
 /* ---------- lo estimado va aparte de lo exacto ----------
    Un consumo en dólares que llegó sin tipo de cambio se anota con una
    estimación y queda marcado `porConciliar`. Esa cifra no puede mezclarse con
@@ -1198,13 +1211,13 @@ function consumidoCardExacto(c){return consumidoCardPartes(c).exacto;}
 function estimadoCard(c){return consumidoCardPartes(c).estimado;}
 function deudaTotalExacta(){return S.tarjetas.reduce((a,c)=>a+consumidoCardExacto(c),0)+S.loans.reduce((a,l)=>a+loanRem(l),0);}
 function deudaEstimada(){return S.tarjetas.reduce((a,c)=>a+estimadoCard(c),0);}
-function gastoMesExacto(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esDeuda(t)&&!txEstimado(t)).reduce((a,b)=>a+(+b.monto||0),0);}
-function gastoMesEstimado(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esDeuda(t)&&txEstimado(t)).reduce((a,b)=>a+(+b.monto||0),0);}
+function gastoMesExacto(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esDeuda(t)&&!esCuadre(t)&&!txEstimado(t)).reduce((a,b)=>a+(+b.monto||0),0);}
+function gastoMesEstimado(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esDeuda(t)&&!esCuadre(t)&&txEstimado(t)).reduce((a,b)=>a+(+b.monto||0),0);}
 function estimadoPendiente(){return S.tx.filter(txEstimado).reduce((a,t)=>a+(+t.monto||0),0);}
-function saldoHastaExacto(y,mn){const end=monthNum(y,mn);let s=+S.cfg.saldoIni||0;S.tx.forEach(t=>{if(txEstimado(t))return;const d=new Date(t.fecha+'T00:00');if(monthNum(d.getFullYear(),d.getMonth()+1)<=end){if(t.tipo==='Ingreso')s+=+t.monto||0;else if(!t.cardId)s-=+t.monto||0;}});return s;}
+function saldoHastaExacto(y,mn){const end=monthNum(y,mn);let s=+S.cfg.saldoIni||0;S.tx.forEach(t=>{if(txEstimado(t)||cuadreSinCaja(t))return;const d=new Date(t.fecha+'T00:00');if(monthNum(d.getFullYear(),d.getMonth()+1)<=end){if(t.tipo==='Ingreso')s+=+t.monto||0;else if(!t.cardId)s-=+t.monto||0;}});return s;}
 function estimadoCajaHasta(y,mn){return saldoHastaExacto(y,mn)-saldoHasta(y,mn);}
-function bucketReal(y,mn){const o={Necesidad:0,Gusto:0,Ahorro:0};S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{const c=catById(t.catId);const bk=c?c.bucket:'Gusto';if(o[bk]!==undefined)o[bk]+=(+t.monto||0);});return o;}
-function gastoDia(dk){return S.tx.filter(t=>t.tipo==='Gasto'&&t.fecha===dk&&!esDeuda(t)).reduce((a,b)=>a+(+b.monto||0),0);}
+function bucketReal(y,mn){const o={Necesidad:0,Gusto:0,Ahorro:0};S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esCuadre(t)).forEach(t=>{const c=catById(t.catId);const bk=c?c.bucket:'Gusto';if(o[bk]!==undefined)o[bk]+=(+t.monto||0);});return o;}
+function gastoDia(dk){return S.tx.filter(t=>t.tipo==='Gasto'&&t.fecha===dk&&!esDeuda(t)&&!esCuadre(t)).reduce((a,b)=>a+(+b.monto||0),0);}
 
 /* ---------- estrategia de deuda ---------- */
 function debtList(){const arr=[];
@@ -1273,7 +1286,7 @@ function renderDash(){
  const limDia=I*0.8/dimN;
  mk('cDay','bar',{labels:dl,datasets:[{label:'Gasto del día',data:dd,backgroundColor:CLR.navy,borderRadius:3},{type:'line',label:'Límite diario (gasto del mes ÷ días)',data:dl.map(()=>limDia),borderColor:CLR.amber,borderDash:[5,4],pointRadius:0,borderWidth:1.5}]},{scales:axesSol()});
  // pie by category
- const byCat={};S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{const c=catById(t.catId);const nm=c?c.nombre:'Otros';byCat[nm]=(byCat[nm]||0)+(+t.monto||0);});
+ const byCat={};S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esCuadre(t)).forEach(t=>{const c=catById(t.catId);const nm=c?c.nombre:'Otros';byCat[nm]=(byCat[nm]||0)+(+t.monto||0);});
  const pl=Object.keys(byCat),pd=pl.map(k=>byCat[k]);
  mk('cPie','doughnut',{labels:pl.length?pl:['Sin gastos'],datasets:[{data:pl.length?pd:[1],backgroundColor:['#1f3a5f','#0d7c8a','#0f7a52','#bf8a1d','#b3263b','#6b7785','#94a3b8','#c4ccd6','#5b4b9e','#a66100'],borderWidth:2,borderColor:'#fff'}]},{cutout:'60%',plugins:{legend:{position:'right',labels:{color:CLR.legend,boxWidth:7,usePointStyle:true,font:{family:'Inter',size:11}}}}});
  // monthly real
@@ -1341,7 +1354,7 @@ function generateRecurrentes(){const now=new Date(),mk=now.getFullYear()+'-'+pad
  if(ch){S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));persist();}}
 function recurrentesPendientes(){const now=new Date(),mk=now.getFullYear()+'-'+pad(now.getMonth()+1),hoy=now.getDate(),dim=daysIn(now.getFullYear(),now.getMonth()+1);
  return (S.recurrentes||[]).filter(r=>{const dia=Math.min(+r.dia||1,dim);return r.lastGen!==mk&&dia>hoy;}).map(r=>({concepto:r.concepto,monto:+r.monto||0,dia:Math.min(+r.dia||1,dim)}));}
-function saldoCuenta(id){return (S.tx||[]).filter(t=>t.cuentaId===id).reduce((a,t)=>a+(t.tipo==='Ingreso'?1:-1)*(+t.monto||0),0);}
+function saldoCuenta(id){return (S.tx||[]).filter(t=>t.cuentaId===id&&!cuadreSinCaja(t)).reduce((a,t)=>a+(t.tipo==='Ingreso'?1:-1)*(+t.monto||0),0);}
 function renderCta(){document.getElementById('ctaBody').innerHTML=(S.cuentas||[]).map(c=>`<tr><td class="lft">${c.nombre}</td><td class="${saldoCuenta(c.id)<0?'neg':''}">${fmt(saldoCuenta(c.id))}</td><td><button class="del" onclick="delCuenta(${c.id})">✕</button></td></tr>`).join('')||'<tr><td colspan="3" class="empty">Sin cuentas.</td></tr>';}
 function addCuenta(){const n=document.getElementById('ctNombre').value;if(!n){alert('Nombre');return;}S.cuentas=S.cuentas||[];S.cuentas.push({id:newId(),nombre:n});document.getElementById('ctNombre').value='';save();}
 function delCuenta(id){S.cuentas=(S.cuentas||[]).filter(x=>x.id!==id);save();}
@@ -1507,6 +1520,48 @@ function addCardPayment(){const v=document.getElementById('payCard').value,f=doc
  const cat=S.categorias.find(x=>x.auto==='deuda')||S.categorias.find(x=>x.nombre==='Pago de deudas');
  S.tx.push(Object.assign({id:newId(),fecha:f,tipo:'Gasto',catId:cat?cat.id:null,concepto:'Pago '+nombre,monto:mo},extra));S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));
  document.getElementById('payMonto').value='';save();}
+/* ---------- los dos cuadres ----------
+   Van aquí, en el motor, por lo mismo que todo lo demás: la pantalla sólo
+   pregunta y confirma; quien escribe en S es esto. */
+
+/** Deja una cuenta en el saldo que de verdad tiene, anotando la diferencia.
+    Se le pide el saldo REAL, no la diferencia: nadie sabe de memoria cuánto le
+    falta, pero todos pueden leer el saldo en la app del banco.
+    Devuelve el movimiento creado, o null si ya cuadraba. */
+function addCuadreCaja(cuentaId,saldoReal,fecha){
+ const id=+cuentaId||0,real=parseFloat(saldoReal);
+ if(!id||!isFinite(real))return null;
+ const dif=Math.round((real-saldoCuenta(id))*100)/100;
+ if(Math.abs(dif)<0.005)return null;                 // ya está cuadrada
+ const c=ctaById(id);
+ const t={id:newId(),fecha:fecha||keyOf(new Date()),tipo:dif>0?'Ingreso':'Gasto',
+   catId:null,cuentaId:id,concepto:'Cuadre · '+((c&&c.nombre)||'cuenta'),
+   monto:Math.abs(dif),cuadre:'caja'};
+ S.tx.push(t);S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));save();
+ return t;}
+
+/** Baja una deuda sin tocar la caja: el caso de haber pagado antes del corte,
+    en efectivo, o de un abono que nunca se anotó. `sel` es 'c:<tarjeta>' o
+    'l:<préstamo>', el mismo formato que usa addCardPayment. */
+function addCuadreDeuda(sel,monto,fecha){
+ const mo=Math.round((parseFloat(monto)||0)*100)/100;
+ if(!(mo>0))return null;
+ const parte=String(sel||'').split(':'),k=parte[0],id=+parte[1];
+ let nombre='',extra={};
+ if(k==='c'){const c=(S.tarjetas||[]).find(x=>x.id===id);if(!c)return null;nombre=c.nombre;extra.payCardId=id;}
+ else if(k==='l'){const l=(S.loans||[]).find(x=>x.id===id);if(!l)return null;nombre=l.nombre;extra.payLoanId=id;}
+ else return null;
+ const cat=S.categorias.find(x=>x.auto==='deuda');
+ const t=Object.assign({id:newId(),fecha:fecha||keyOf(new Date()),tipo:'Gasto',
+   catId:cat?cat.id:null,cuentaId:null,concepto:'Cuadre · '+nombre,monto:mo,cuadre:'deuda'},extra);
+ S.tx.push(t);S.tx.sort((a,b)=>b.fecha.localeCompare(a.fecha));save();
+ return t;}
+
+/** Lo que se lleva cuadrado en el mes. La portada lo usa para avisarle cuando
+    deja de ser ruido: cuadrar 20 es normal, cuadrar 200 todos los meses es que
+    algo se está escapando sin anotarse. */
+function cuadreMes(y,mn){return (S.tx||[]).filter(t=>esCuadre(t)&&inMonth(t,y,mn))
+  .reduce((a,t)=>a+(+t.monto||0),0);}
 
 /* ---------- ESTADO DE CUENTA (EECC) ---------- */
 function eeccMV(){let v=document.getElementById('eeccMes').value;if(!v){v=new Date().toISOString().slice(0,7);document.getElementById('eeccMes').value=v;}return v;}
@@ -2770,7 +2825,7 @@ addEventListener('load',()=>{
   b.querySelector('.secTit h4').textContent='Gastos de '+MESES[mn-1];
   /* misma cuenta que la tabla de Presupuesto: gasto del mes por categoría */
   const byCat={};
-  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(function(t){
+  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esCuadre(t)).forEach(function(t){
    const c=catById(t.catId), nm=c?c.nombre.split(' (')[0]:'Otros';
    byCat[nm]=(byCat[nm]||0)+(+t.monto||0);
   });
@@ -2958,7 +3013,7 @@ addEventListener('load',()=>{
 
   /* d. categorías pasadas de su límite */
   const gastoCat={};
-  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{
+  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esCuadre(t)).forEach(t=>{
    gastoCat[t.catId]=(gastoCat[t.catId]||0)+(+t.monto||0); });
   (S.categorias||[]).forEach(c=>{
    if(c.auto==='deuda') return;
@@ -3110,6 +3165,6 @@ addEventListener('load',()=>{
  try{ pintarTodo(); }catch(e){ console.warn('v3.6.0:',e); }
 })();
 </script>
-<script src="nx.js?v=482"></script>
+<script src="nx.js?v=484"></script>
 </body>
 </html>
