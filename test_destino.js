@@ -7,19 +7,23 @@
    Corre con:  node test_destino.js                                           */
 const fs = require('fs');
 
-/* saca el texto real de la función de nx.js y lo ejecuta: así la prueba mide
-   el código que se publica, no una copia. */
-function cargar() {
-  const src = fs.readFileSync(__dirname + '/nx.js', 'utf8');
-  const i = src.indexOf('function destinoCorreo(m){');
-  if (i < 0) throw new Error('no se encontró destinoCorreo en nx.js');
-  let d = 0, j = src.indexOf('{', i);
-  for (let k = j; k < src.length; k++) {
-    if (src[k] === '{') d++;
-    else if (src[k] === '}') { d--; if (!d) { j = k + 1; break; } }
+/* saca el texto real de las funciones de nx.js y las ejecuta: así la prueba
+   mide el código que se publica, no una copia. */
+const SRC = fs.readFileSync(__dirname + '/nx.js', 'utf8');
+function trozo(nombre) {
+  const i = SRC.indexOf('function ' + nombre + '(');
+  if (i < 0) throw new Error('no se encontró ' + nombre + ' en nx.js');
+  let d = 0, j = SRC.indexOf('{', i);
+  for (let k = j; k < SRC.length; k++) {
+    if (SRC[k] === '{') d++;
+    else if (SRC[k] === '}') { d--; if (!d) { j = k + 1; break; } }
   }
-  const cuerpo = src.slice(i, j);
-  return new Function('S', cuerpo + '; return destinoCorreo;');
+  return SRC.slice(i, j);
+}
+function cargar(nombres) {
+  const cuerpo = nombres.map(trozo).join('\n');
+  return new Function('S', 'ctaById', 'persist',
+    cuerpo + '; return {' + nombres.join(',') + '};');
 }
 
 /* sus cuentas y deudas reales, con los nombres que él eligió */
@@ -28,7 +32,7 @@ const S = {
     {id:1, nombre:'Efectivo'},
     {id:2, nombre:'Cuenta BCP / Yape'},
     {id:3, nombre:'Cuenta Sueldo BCP'},
-    {id:4, nombre:'Wardadito BCP'},
+    {id:4, nombre:'Wardadito Casa'}, {id:8, nombre:'Wardadito Viaje'},
     {id:5, nombre:'Cuenta Interbank / Plin'},
     {id:6, nombre:'Caja Huancayo'},
     {id:7, nombre:'Ripley Max'}
@@ -41,7 +45,7 @@ const S = {
   ]
 };
 
-const destinoCorreo = cargar()(S);
+const destinoCorreo = cargar(['destinoCorreo'])(S).destinoCorreo;
 
 const casos = [
   // [qué llegó,                                      medio,          tipo,              tipo esperado, rótulo esperado]
@@ -79,6 +83,33 @@ const aEfectivo = casos.filter(([q, medio, tipo]) => {
 });
 if (aEfectivo.length) fallas.push(aEfectivo.length + ' correos cayeron en Efectivo por descarte');
 
+/* ---------- los dos extremos de un traslado ----------
+   El lector manda 'cta:2033' o 'wardadito:Viaje'. Aquí se cuida que la app
+   los resuelva, que NO adivine cuando no sabe, y que aprenda a la primera. */
+const T = cargar(['ctaDeToken', 'aprenderCuenta'])(
+  S, id => S.cuentas.find(c => c.id === id), function () {});
+const nom = t => { const c = T.ctaDeToken(t); return c ? c.nombre : null; };
+
+console.log('');
+const chkT = (q, real, esp) => {
+  const ok = real === esp;
+  console.log((ok ? '  ok   ' : '  FALLA') + ' · ' + q + '  →  ' + real);
+  if (!ok) fallas.push(q + ': esperaba ' + esp + ', salió ' + real);
+};
+
+chkT('un wardadito se reconoce por su nombre', nom('wardadito:Viaje'), 'Wardadito Viaje');
+chkT('y el otro también, sin confundirse', nom('wardadito:Casa'), 'Wardadito Casa');
+chkT('una cuenta sin dígitos aprendidos NO se adivina', nom('cta:2033'), null);
+
+/* él elige una vez: la app lo guarda y no vuelve a preguntar */
+T.aprenderCuenta('cta:2033', 2);
+chkT('tras elegirla una vez, ya la reconoce', nom('cta:2033'), 'Cuenta BCP / Yape');
+T.aprenderCuenta('cta:9029', 3);
+chkT('y la otra cuenta va a la suya', nom('cta:9029'), 'Cuenta Sueldo BCP');
+chkT('el BCP enmascara con 3 dígitos y aun así calza', nom('cta:029'), 'Cuenta Sueldo BCP');
+chkT('un dígito que nunca eligió sigue sin inventarse', nom('cta:5018'), null);
+chkT('aprender dos veces no duplica', S.cuentas.find(c => c.id === 2).digitos.length, 1);
+
 console.log('');
 if (fallas.length) { console.log('FALLA\n- ' + fallas.join('\n- ')); process.exit(1); }
-console.log('TODO BIEN · ' + casos.length + ' correos van a donde deben');
+console.log('TODO BIEN · ' + casos.length + ' correos van a donde deben, y los traslados se resuelven solos');

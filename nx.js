@@ -2639,6 +2639,44 @@
   }).finally(()=>contadorOff());
  }
 
+ /* ---- los dos extremos de un traslado ----
+    El lector manda tokens, no cuentas: 'cta:2033' o 'wardadito:Viaje'. Él no
+    sabe qué cuentas hay en la app, así que las resuelve ella.
+    Los wardaditos se reconocen por el nombre, que el correo trae entero. Las
+    cuentas sólo por los últimos dígitos, y esos NO se le piden a él: la primera
+    vez que elige a mano, se guardan pegados a esa cuenta y no se vuelve a
+    preguntar. Transcribir un número de cuenta a mano es justo la forma de
+    mandar un traslado a la cuenta equivocada sin que nadie se entere. */
+ let trasSel={};                       // id de correo -> {de,a} elegidos a mano
+ function ctaDeToken(tok){
+  const s=String(tok||''); if(!s) return null;
+  const C=(S.cuentas||[]);
+  const w=s.match(/^wardadito:(.+)$/i);
+  if(w){ const n=w[1].trim().toLowerCase();
+   return C.find(a=>/wardadito/i.test(a.nombre||'')&&(a.nombre||'').toLowerCase().indexOf(n)>=0)
+       || C.find(a=>(a.nombre||'').toLowerCase().indexOf(n)>=0) || null; }
+  const d=s.match(/^cta:(\d{3,4})$/);
+  if(!d) return null;
+  /* el BCP enmascara con 3 o 4 dígitos según el correo: se comparan los 3 finales */
+  const fin=d[1].slice(-3);
+  return C.find(a=>(a.digitos||[]).some(x=>String(x).slice(-3)===fin)) || null;
+ }
+ /** lo que ya se sabe de este traslado: lo que él eligió, o lo aprendido */
+ function trasDe(m){
+  const g=trasSel[m.id]||{};
+  const r={de:g.de||null, a:g.a||null};
+  if(!r.de){ const c=ctaDeToken(m.de); if(c) r.de=c.id; }
+  if(!r.a ){ const c=ctaDeToken(m.a ); if(c) r.a =c.id; }
+  return r;
+ }
+ /** la primera vez que él dice a qué cuenta corresponde un dígito, queda guardado */
+ function aprenderCuenta(tok,cuentaId){
+  const d=String(tok||'').match(/^cta:(\d{3,4})$/); if(!d) return;
+  const c=ctaById(+cuentaId); if(!c) return;
+  c.digitos=c.digitos||[];
+  if(c.digitos.indexOf(d[1])<0){ c.digitos.push(d[1]); try{ persist(); }catch(e){} }
+ }
+
  /* ---- de qué cuenta o tarjeta salió ----
     Yape y Plin NO son cuentas aparte: son la misma plata de su cuenta BCP y de
     su cuenta Interbank. Y de las dos cuentas BCP que tiene, la del día a día es
@@ -3071,10 +3109,20 @@
         '</b> por '+fmt2(y.monto)+' ese mismo día. Míralo antes de anotar, para no contarlo dos veces.</div>'
       : ''; })()+
     (esTras
-     ? '<div class="nt">Mover plata de un bolsillo a otro no es un gasto, así que esto '+
-       '<b>no cambia tus totales</b>. Descártalo cuando lo hayas visto.</div>'+
-       '<div class="bt"><button class="ok solo" data-ok="'+h(m.id)+'" hidden></button>'+
-       '<button class="no" data-no="'+h(m.id)+'">Visto, descartar</button></div>'
+     ? (function(){
+        const t=trasDe(m), rotC=id=>{const c=ctaById(id);return c?c.nombre:'elegir';};
+        const listo=!!(t.de&&t.a&&t.de!==t.a);
+        return '<div class="ch">'+
+         '<button class="chip" data-tde="'+h(m.id)+'">↗️ de '+h(rotC(t.de))+' ›</button>'+
+         '<button class="chip" data-ta="'+h(m.id)+'">↘️ a '+h(rotC(t.a))+' ›</button></div>'+
+         '<div class="nt">'+(listo
+          ? 'Baja <b>'+h(rotC(t.de))+'</b> y sube <b>'+h(rotC(t.a))+'</b>. Tu plata total no cambia, '+
+            'pero cada cuenta queda con lo que de verdad tiene.'
+          : 'Mover plata de un bolsillo a otro no es un gasto, pero sí cambia el saldo de cada cuenta. '+
+            'Dime de cuál a cuál y lo anoto en las dos: <b>la próxima vez ya no pregunto</b>.')+'</div>'+
+         '<div class="bt"><button class="ok" data-tok="'+h(m.id)+'"'+(listo?'':' disabled')+
+           '>Anotar traslado</button>'+
+         '<button class="no" data-no="'+h(m.id)+'">Descartar</button></div>'; })()
      : '<div class="ch">'+
         '<button class="chip" data-cat="'+h(m.id)+'">'+(cat?emoCat(cat)+' '+h(rotCat(cat)):'sin categoría')+' ›</button>'+
         '<button class="chip" data-dst="'+h(m.id)+'">'+
@@ -3219,6 +3267,45 @@
       :p[0]==='pagoLoan'?((S.loans||[]).find(x=>x.id===id)||{}).nombre
       :((S.tarjetas||[]).find(x=>x.id===id)||{}).nombre)||'';
     e.dest={tipo:p[0],id:id,rot:rot}; pinta(0);
+   });
+  });
+
+  ['tde','ta'].forEach(lado=>{
+   document.querySelectorAll('#nx-body [data-'+lado+']').forEach(b=>b.onclick=()=>{
+    const m=bnd.items.find(x=>x.id===b.dataset[lado]); if(!m) return;
+    const esDe=(lado==='tde'), tok=esDe?m.de:m.a, act=trasDe(m);
+    vib(8);
+    hoja(esDe?'¿De qué cuenta salió?':'¿A qué cuenta entró?',
+     (S.cuentas||[]).map(a=>({v:String(a.id),n:a.nombre,e:'👛',s:'tienes '+fmt(saldoCuenta(a.id))})),
+     String((esDe?act.de:act.a)||''), v=>{
+      const ant=trasSel[m.id]||{};
+      trasSel[m.id]=esDe?{de:+v,a:ant.a}:{de:ant.de,a:+v};
+      aprenderCuenta(tok,+v);
+      pinta(0);
+     });
+   });
+  });
+
+  document.querySelectorAll('#nx-body [data-tok]').forEach(b=>b.onclick=()=>{
+   const m=bnd.items.find(x=>x.id===b.dataset.tok); if(!m) return;
+   const t=trasDe(m); if(!t.de||!t.a||t.de===t.a) return;
+   const cde=ctaById(t.de), cha=ctaById(t.a), mo=montoCorreo(m);
+   const antes=JSON.stringify(S);
+   const fila=(c,a,b2)=>'<div class="cifras"><span class="fl">'+h(c.nombre)+'</span>'+
+     '<span class="a">'+fmt(a)+'</span><span class="fl">→</span><span class="b">'+fmt(b2)+'</span></div>';
+   confirmar({titulo:'¿Anotar este traslado?',boton:'Sí, anotar',
+    detalle:'<div><b>'+h(m.concepto||'Traslado')+'</b> · '+fmt2(mo)+' el '+fechaCorta(m.fecha)+'</div>'+
+     fila(cde,saldoCuenta(t.de),saldoCuenta(t.de)-mo)+
+     fila(cha,saldoCuenta(t.a), saldoCuenta(t.a)+mo)+
+     '<p style="margin:10px 0 0">Tu plata total no se mueve. No cuenta como gasto ni como ingreso del mes.</p>'
+   },()=>{
+    vib(18);
+    addTraslado(t.de,t.a,mo,m.fecha,m.concepto||'',m.id);   // ← motor
+    archivarCorreos([m.id]);
+    delete trasSel[m.id];
+    toast('Traslado anotado',cde.nombre+' → '+cha.nombre,
+      ()=>{ revertir(antes); toast('Traslado deshecho','',null); });
+    pinta(0);
    });
   });
 
