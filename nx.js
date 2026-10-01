@@ -2528,7 +2528,14 @@
   }).finally(()=>contadorOff());
  }
 
- /* ---- de qué cuenta o tarjeta salió ---- */
+ /* ---- de qué cuenta o tarjeta salió ----
+    Yape y Plin NO son cuentas aparte: son la misma plata de su cuenta BCP y de
+    su cuenta Interbank. Y de las dos cuentas BCP que tiene, la del día a día es
+    la que lleva Yape; a la del sueldo y al wardadito no les llegan estos avisos.
+    Antes se buscaba /cuenta bancaria|banco|ahorro/, y con nombres reales como
+    "Cuenta BCP / Yape" o "Cuenta Interbank / Plin" eso no coincide con nada:
+    cada transferencia, yapeo, retiro y pago de servicio terminaba anotado en
+    Efectivo, y los movimientos de Interbank también. */
  function destinoCorreo(m){
   const C=(S.cuentas||[]), T=(S.tarjetas||[]), L=(S.loans||[]);
   const cta=re=>C.find(a=>re.test(a.nombre||''));
@@ -2536,14 +2543,20 @@
   const pre=re=>L.find(l=>re.test(l.nombre||''));
   const p=(o,tipo)=>o?{tipo:tipo,id:o.id,rot:o.nombre}:null;
   const esPago=(m.tipo==='Pago de deuda');
+  /* la cuenta BCP del día a día, en este orden: la de Yape, una BCP que no sea
+     el sueldo ni el wardadito, o cualquier cuenta de banco que haya. */
+  const bcpDia=()=>cta(/yape/i)
+    || C.find(a=>/bcp/i.test(a.nombre||'')&&!/sueldo|wardadito/i.test(a.nombre||''))
+    || cta(/bcp|cuenta bancaria|banco|ahorro/i);
+  const ctaIbk=()=>cta(/interbank|ibk|plin/i);
   let r=null;
   /* pagar su propia tarjeta NO es un gasto nuevo: baja la deuda */
   if(m.medio==='credito-bcp')  r=esPago?p(tar(/bcp/i),'pagoCard'):p(tar(/bcp/i),'card');
-  else if(m.medio==='debito-bcp') r=p(cta(/d[eé]bito/i)||cta(/cuenta/i),'cta');
-  else if(m.medio==='cuenta-bcp') r=p(cta(/cuenta bancaria|banco|ahorro/i)||C[0],'cta');
-  else if(m.medio==='yape')      r=p(cta(/yape|plin/i)||C[0],'cta');
+  else if(m.medio==='debito-bcp') r=p(cta(/d[eé]bito/i)||bcpDia(),'cta');
+  else if(m.medio==='cuenta-bcp') r=p(bcpDia()||C[0],'cta');
+  else if(m.medio==='yape')      r=p(bcpDia()||C[0],'cta');
   else if(m.medio==='interbank') r=esPago
-      ? p(tar(/interbank|ibk/i),'pagoCard') : p(cta(/cuenta bancaria|banco/i)||C[0],'cta');
+      ? p(tar(/interbank|ibk/i),'pagoCard') : p(ctaIbk()||C[0],'cta');
   /* Huancayo y Ripley: él los usa para pagar deudas, así que si existe el
      préstamo con ese nombre se propone abonar a ESA deuda. */
   else if(m.medio==='huancayo')  r=(esPago?p(pre(/huancayo/i),'pagoLoan'):null)
