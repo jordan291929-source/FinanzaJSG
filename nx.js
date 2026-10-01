@@ -343,7 +343,7 @@
     s:'Cuota del mes '+fmt(v.cuota),a:{r:'Próximos pagos →',k:'pagos'}});
   });
   const gc={};
-  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{ gc[t.catId]=(gc[t.catId]||0)+(+t.monto||0); });
+  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esCuadre(t)).forEach(t=>{ gc[t.catId]=(gc[t.catId]||0)+(+t.monto||0); });
   (S.categorias||[]).forEach(c=>{
    if(c.auto==='deuda') return;
    const lim=effLimite(c,y,mn), usa=gc[c.id]||0;
@@ -1162,6 +1162,7 @@
       '</button>';
    }).join(''):'<div class="nx-empty">Sin cuentas.</div>')+'</div>'+
    '<button class="nx-go sec" id="nxCtaNue" style="margin-top:10px">Agregar una cuenta</button>'+
+   '<button class="nx-go sec" id="nxCtaCua" style="margin-top:9px">Cuadrar con el banco</button>'+
 
    '<div class="nx-st" style="margin-top:22px"><h3>Tarjetas de crédito</h3>'+
      '<span style="font-size:12px;color:var(--nx-mut)">'+trj.length+'</span></div>'+
@@ -1181,6 +1182,9 @@
   document.querySelectorAll('#nx-body [data-trj]').forEach(b=>b.onclick=()=>{
    trjEd=null; go('tarjed',{id:+b.dataset.trj}); });
   $('nxCtaNue').onclick=()=>{ ced2={id:0,nombre:''}; go('cuented',{id:0}); };
+  const cua=$('nxCtaCua'); if(cua) cua.onclick=()=>{
+   const a=(S.cuentas||[])[0]; go('cuadre',{sel:a?'a:'+a.id:''});
+  };
   $('nxTrjNue').onclick=()=>{
    vib(8);
    confirmar({titulo:'¿Agregar una tarjeta?',boton:'Sí, agregar',
@@ -1666,8 +1670,13 @@
    '<div class="nx-box">'+(pend.length?pend.map(filaVenc).join(''):'<div class="nx-empty">Nada pendiente.</div>')+'</div>'+
    (list.length?'<div class="nx-st"><h3>Ya pagados</h3></div><div class="nx-box">'+list.map(filaVenc).join('')+'</div>':'')+
    '<button class="nx-go" id="nxPagG">Registrar un pago</button>'+
+   '<button class="nx-go sec" id="nxPagC" style="margin-top:9px">Cuadrar una deuda</button>'+
    '</div>';
- },wire(){ $('nxPagG').onclick=()=>go('pagar',{}); }};
+ },wire(){ $('nxPagG').onclick=()=>go('pagar',{});
+  const c=$('nxPagC'); if(c) c.onclick=()=>{
+   const l=(S.loans||[])[0], t=(S.tarjetas||[])[0];
+   go('cuadre',{sel:t?'c:'+t.id:(l?'l:'+l.id:'')});
+  }; }};
 
  /* ------------------------------- Deudas ------------------------------- */
  P.deudas={html(){
@@ -1784,6 +1793,108 @@
   };
  }};
 
+ /* -------------------------------- Cuadre --------------------------------
+    Corregir sin mentir. Dos casos distintos en una sola pantalla:
+      · una cuenta → se le pregunta cuánto tiene DE VERDAD, no la diferencia.
+        El saldo se lee en la app del banco; la diferencia no la sabe nadie de
+        memoria, y pedirla es pedirle que haga una resta para poder corregir.
+      · una deuda  → cuánto abonó que nunca quedó anotado. Baja la deuda y no
+        le toca la caja: esa plata ya salió antes.
+    Ningún cuadre cuenta como gasto del mes. Para eso existe: si entrara como
+    gasto normal se comería el límite de una categoría, y el presupuesto
+    empezaría a mentir justo cuando él trataba de arreglarlo. */
+ let cuaSel='', cuaMonto='';
+ function cuaOpciones(){
+  return (S.cuentas||[]).map(c=>['a:'+c.id,'Cuenta · '+c.nombre])
+   .concat((S.tarjetas||[]).map(c=>['c:'+c.id,'Tarjeta · '+c.nombre]))
+   .concat((S.loans||[]).map(l=>['l:'+l.id,'Préstamo · '+l.nombre]));
+ }
+ /** lo que la app cree hoy de eso que se va a cuadrar */
+ function cuaHoy(sel){
+  const p=String(sel||'').split(':'), id=+p[1];
+  if(p[0]==='a') return saldoCuenta(id);
+  if(p[0]==='c'){ const c=(S.tarjetas||[]).find(x=>x.id===id); return c?consumidoCard(c):0; }
+  const l=(S.loans||[]).find(x=>x.id===id); return l?loanRem(l):0;
+ }
+ P.cuadre={nav:false,html(p){
+  const ops=cuaOpciones();
+  if(!cuaSel||!ops.some(o=>o[0]===cuaSel)) cuaSel=(p&&p.sel)||(ops[0]||[''])[0];
+  const esCta=cuaSel.charAt(0)==='a';
+  const rot=(ops.find(x=>x[0]===cuaSel)||['',''])[1];
+  const hoy=cuaHoy(cuaSel), num=parseFloat(cuaMonto)||0;
+  const dif=esCta?Math.round((num-hoy)*100)/100:Math.min(num,hoy);
+  const vale=esCta?(cuaMonto!==''&&Math.abs(dif)>=0.005):(num>0);
+  let pista='';
+  if(vale&&esCta) pista='<div class="nx-tip'+(dif<0?' nxw':'')+'"><span>'+(dif<0?'➖':'➕')+'</span><span>'+
+    'Te falta anotar '+fmt2(Math.abs(dif))+'. '+(dif<0?'Salió plata que no está anotada.':'Entró plata que no está anotada.')+
+    ' No va a contar como '+(dif<0?'gasto':'ingreso')+' del mes.</span></div>';
+  else if(vale) pista='<div class="nx-tip"><span>✓</span><span>La deuda baja '+fmt2(dif)+
+    ' y tu saldo no se mueve, porque esa plata ya salió antes.</span></div>';
+  return '<div class="nx-reg">'+
+   '<div class="rt"><button class="x" data-back aria-label="Cerrar">'+CERRAR_X+'</button>'+
+    '<b style="font-size:15px">Cuadre</b><span></span></div>'+
+   '<div class="nx-amt"><div class="k">'+(esCta?'¿Cuánto tienes de verdad?':'¿Cuánto abonaste sin anotar?')+'</div>'+
+    '<div class="v nx-num"><small>S/</small>'+num.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
+   '<button class="nx-fld" id="nxCD"><span class="k">Qué cuadro</span><span class="v">'+h(rot)+' ›</span></button>'+
+   '<button class="nx-fld" id="nxCH"><span class="k">'+(esCta?'La app dice que tienes':'La app dice que debes')+
+    '</span><span class="v">'+fmt2(hoy)+(esCta?' · usar ›':'')+'</span></button>'+
+   pista+
+   '<div class="nx-pad">'+[1,2,3,4,5,6,7,8,9].map(d=>'<button data-n="'+d+'">'+d+'</button>').join('')+
+    '<button data-n=".">.</button><button data-n="0">0</button><button data-n="del">⌫</button></div>'+
+   '<button class="nx-go" id="nxCG"'+(vale?'':' disabled')+'>Cuadrar</button></div>';
+ },wire(){
+  const d=$('nxCD'); if(d) d.onclick=()=>{
+   vib(8);
+   const lista=(S.cuentas||[]).map(c=>({v:'a:'+c.id,n:c.nombre,e:'👛',s:'tienes '+fmt(saldoCuenta(c.id))}))
+    .concat((S.tarjetas||[]).map(c=>({v:'c:'+c.id,n:c.nombre,e:'💳',s:'debes '+fmt(consumidoCard(c))})))
+    .concat((S.loans||[]).map(l=>({v:'l:'+l.id,n:l.nombre,e:'📄',s:'debes '+fmt(loanRem(l))})));
+   hoja('¿Qué estás cuadrando?',lista,cuaSel,v=>{ cuaSel=v; cuaMonto=''; pinta(0); });
+  };
+  /* en una cuenta, "usar" rellena lo que la app cree: así sólo corrige el final */
+  const hb=$('nxCH'); if(hb) hb.onclick=()=>{
+   if(cuaSel.charAt(0)!=='a') return;
+   cuaMonto=cuaHoy(cuaSel).toFixed(2); vib(8); pinta(0);
+  };
+  document.querySelectorAll('#nx-body .nx-pad button').forEach(b=>alToque(b,()=>{
+   const n=b.dataset.n; vib(6);
+   if(n==='del') cuaMonto=cuaMonto.slice(0,-1);
+   else if(n==='.'){ if(cuaMonto.indexOf('.')<0) cuaMonto=(cuaMonto||'0')+'.'; }
+   else { if(cuaMonto.indexOf('.')>=0&&cuaMonto.split('.')[1].length>=2) return;
+          cuaMonto=(cuaMonto==='0'?'':cuaMonto)+n; }
+   pinta(0);
+  }));
+  const g=$('nxCG'); if(g) g.onclick=()=>{
+   const esCta=cuaSel.charAt(0)==='a', num=parseFloat(cuaMonto)||0;
+   const hoy=cuaHoy(cuaSel), m=mesSel();
+   const rot=(cuaOpciones().find(x=>x[0]===cuaSel)||['',''])[1];
+   const antes=JSON.stringify(S);
+   const cajaA=saldoHasta(m.y,m.mn), deuA=deudaTotal();
+   /* la cuenta: antes→después del saldo de ESA cuenta, que es lo que mira él */
+   const propio=esCta?saldoCuenta(+cuaSel.split(':')[1]):hoy;
+   const propioB=esCta?num:Math.max(0,hoy-Math.min(num,hoy));
+   confirmar({
+    titulo:esCta?'¿Dejar esa cuenta en '+fmt2(num)+'?':'¿Bajar esa deuda '+fmt2(Math.min(num,hoy))+'?',
+    boton:'Sí, cuadrar',
+    detalle:'<div class="cifras"><span class="fl">'+h(rot)+'</span>'+
+      '<span class="a">'+fmt(propio)+'</span><span class="fl">→</span><span class="b">'+fmt(propioB)+'</span></div>'+
+      '<p style="margin:10px 0 0">'+(esCta
+        ? 'Se anota la diferencia como cuadre. No cuenta como gasto ni ingreso del mes, y no toca ninguna categoría.'
+        : 'Baja la deuda sin mover tu saldo, porque esa plata ya salió antes del corte.')+'</p>'
+   },()=>{
+    vib(18);
+    const t=esCta?addCuadreCaja(+cuaSel.split(':')[1],num,keyOf(new Date()))
+                 :addCuadreDeuda(cuaSel,Math.min(num,hoy),keyOf(new Date()));
+    if(!t){ toast('No hacía falta cuadrar','Ya estaba en esa cifra',null); cuaMonto=''; volver(); return; }
+    const partes=[];
+    const cajaB=saldoHasta(m.y,m.mn), deuB=deudaTotal();
+    if(Math.abs(deuA-deuB)>0.5) partes.push('deuda '+fmt(deuA)+' → '+fmt(deuB));
+    if(Math.abs(cajaA-cajaB)>0.5) partes.push('disponible '+fmt(cajaA)+' → '+fmt(cajaB));
+    cuaMonto=''; volver();
+    toast('Cuadrado',partes.join(' · '),()=>{ revertir(antes); toast('Cuadre deshecho','',null); });
+   });
+  };
+ }};
+
  /* -------------------------------- Metas -------------------------------- */
  P.metas={html(){
   const ms=S.metas||[];
@@ -1883,7 +1994,7 @@
   const tg={Necesidad:I*0.5,Gusto:I*0.3,Ahorro:I*0.2};
   const gc={};
   const ico={};
-  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)).forEach(t=>{
+  (S.tx||[]).filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esCuadre(t)).forEach(t=>{
    const c=catById(t.catId), nm=c?c.nombre.split(' (')[0]:'Otros';
    if(c) ico[nm]=emoCat(c);
    gc[nm]=(gc[nm]||0)+(+t.monto||0); });
