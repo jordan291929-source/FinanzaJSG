@@ -1,7 +1,10 @@
-# Respaldos con sus cifras reales: saldos, deudas y los ultimos digitos de las
-# tarjetas. El repo es publico y se sirve tal cual por GitHub Pages, asi que
-# esto NUNCA se sube: el archivo se le manda y vive solo en su telefono.
+# Nada con sus cifras reales entra al repo. Es publico y GitHub Pages sirve lo
+# que haya aqui, asi que un respaldo o una plantilla llena quedaria descargable
+# por cualquiera: saldos, deudas y los ultimos digitos de las tarjetas.
+# Esos archivos se le entregan y viven solo en su telefono.
 finanzas_arranque.json
 finanzas_backup.json
 *_backup.json
 *_arranque.json
+plantilla_inicio_finanzas.xlsx
+*.xlsx
