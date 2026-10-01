@@ -1,0 +1,7 @@
+# Respaldos con sus cifras reales: saldos, deudas y los ultimos digitos de las
+# tarjetas. El repo es publico y se sirve tal cual por GitHub Pages, asi que
+# esto NUNCA se sube: el archivo se le manda y vive solo en su telefono.
+finanzas_arranque.json
+finanzas_backup.json
+*_backup.json
+*_arranque.json
