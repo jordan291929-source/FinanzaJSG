@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="fonts/inter.css">
-<link rel="stylesheet" href="nx.css?v=485">
+<link rel="stylesheet" href="nx.css?v=486">
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
@@ -1012,6 +1012,7 @@ tbody tr:nth-child(even){background:#fafaf7}
       <button onclick="connectSync()">Conectar</button>
       <button class="ghost" onclick="pullCloud(true)">Cargar de la nube</button>
       <button class="ghost" onclick="pushNow()">Guardar en la nube</button>
+      <button class="ghost" onclick="pushNow(true)">Forzar: lo de aquí manda</button>
     </div>
     <div class="hint" id="syncStatus">No conectado. Pega tu URL para sincronizar laptop y celular. (Te paso la guía de cómo crearla.)</div>
   </div>
@@ -1037,7 +1038,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='4.8.5'; // se actualiza con cada mejora del sistema
+const APP_VERSION='4.8.6'; // se actualiza con cada mejora del sistema
 /* un `const` de nivel superior NO queda en window, y por eso la versión salía
    vacía en Perfil y en Acerca de. Se expone a mano. */
 window.APP_VERSION=APP_VERSION;
@@ -1114,13 +1115,27 @@ function saveAll(){S.extra=parseFloat(document.getElementById('extra').value)||0
 function getSyncUrl(){return localStorage.getItem('syncUrl')||'';}
 function syncStatus(m,err){const el=document.getElementById('syncStatus');if(el){el.textContent=m;el.style.color=err?'var(--neg)':'var(--muted)';}}
 let pushTimer=null;
+/* La nube rechaza un guardado que llega atrasado, para que un aparato viejo no
+   pise al que está al día. Aquí se entiende ese rechazo y se dice qué hacer. */
+function leerGuardado(r){return r.text().then(t=>{
+  let d=null;try{d=JSON.parse(t);}catch(e){}
+  if(d&&d.ok===false&&d.error==='mas-viejo'){
+   let f='';try{f=new Date(+d.nube).toLocaleString('es-PE',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'});}catch(e){}
+   syncStatus('NO se guardó: la nube tiene algo más reciente'+(f?' (del '+f+')':'')+
+     '. Este aparato está atrasado — carga de la nube antes de seguir aquí.',1);
+   return false;
+  }
+  syncStatus('Guardado en la nube · '+new Date().toLocaleTimeString('es-PE'));
+  return true;});}
+function enviarCloud(u,forzar){
+ const cuerpo=forzar?JSON.stringify(Object.assign({},S,{forzar:true})):JSON.stringify(S);
+ return fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:cuerpo,redirect:'follow'});}
 function pushCloud(){const u=getSyncUrl();if(!u)return;clearTimeout(pushTimer);pushTimer=setTimeout(()=>{
- fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(S),redirect:'follow'})
-  .then(()=>syncStatus('Guardado en la nube · '+new Date().toLocaleTimeString('es-PE')))
-  .catch(()=>syncStatus('Error al guardar en la nube',1));},1200);}
-function pushNow(){const u=getSyncUrl();if(!u){alert('Primero conecta tu URL de sincronización');return Promise.resolve();}S._ts=Date.now();persist();
- return fetch(u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(S),redirect:'follow'})
-  .then(()=>syncStatus('Guardado en la nube · '+new Date().toLocaleTimeString('es-PE'))).catch(()=>syncStatus('Error al guardar',1));}
+ enviarCloud(u).then(leerGuardado).catch(()=>syncStatus('Error al guardar en la nube',1));},1200);}
+function pushNow(forzar){const u=getSyncUrl();if(!u){alert('Primero conecta tu URL de sincronización');return Promise.resolve();}
+ if(forzar&&!confirm('Vas a hacer que lo de ESTE aparato reemplace lo que haya en la nube, aunque allá haya algo más reciente. ¿Seguro?'))return Promise.resolve();
+ S._ts=Date.now();persist();
+ return enviarCloud(u,forzar).then(leerGuardado).catch(()=>syncStatus('Error al guardar',1));}
 function pullCloud(force){const u=getSyncUrl();if(!u){if(force)alert('Primero conecta tu URL');return Promise.resolve();}
  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(u)){syncStatus('La URL debe empezar con https://script.google.com/macros/s/... y terminar en /exec',1);return Promise.resolve();}
  syncStatus('Cargando de la nube...');
@@ -1129,7 +1144,17 @@ function pullCloud(force){const u=getSyncUrl();if(!u){if(force)alert('Primero co
    if(/accounts\.google|sign ?in|iniciar sesi|<html/i.test(txt))throw new Error('login');
    throw new Error('parse');}
   if(d&&typeof d==='object'&&(d.cfg||d.tx||d.categorias)){
-   if(force||!S._ts||(d._ts||0)>=(S._ts||0)){S=migrate(d);persist();generateRecurrentes();renderAll();syncStatus('✓ Cargado de la nube · '+new Date().toLocaleTimeString('es-PE'));}
+   const hayLocal=!!(S._ts&&(S.tx||[]).length);
+   if(force&&hayLocal){
+    /* el botón "Cargar de la nube" pisa todo: aquí es donde se perdió una tarde */
+    reemplazarEstado(d,'cargar de la nube','¿Cargar lo que hay en la nube?',
+      ()=>syncStatus('✓ Cargado de la nube · '+new Date().toLocaleTimeString('es-PE')));
+   }
+   else if(force||!S._ts||(d._ts||0)>=(S._ts||0)){
+    if(hayLocal) copiaAntes('carga automática de la nube');
+    S=migrate(d);persist();generateRecurrentes();renderAll();
+    syncStatus('✓ Cargado de la nube · '+new Date().toLocaleTimeString('es-PE'));
+   }
    else syncStatus('Tu versión local es más reciente (no se sobrescribió).');
   }else syncStatus('Conectado ✓ — la nube está vacía. Pulsa "Guardar en la nube" para subir tus datos.');
  }).catch(e=>{
@@ -1711,23 +1736,85 @@ document.getElementById('cpMes').value=tm;
 (function(){const su=getSyncUrl();const el=document.getElementById('syncUrl');if(el)el.value=su;if(su){syncStatus('Conectado. Cargando de la nube...');pullCloud(false);}const mu=localStorage.getItem('mailUrl')||'';const me=document.getElementById('mailUrl');if(me)me.value=mu;})();
 function cargarEjemplo(){
  if(!confirm('Esto reemplaza TODO lo que tengas cargado por los datos del plan de agosto 2026 (6 préstamos, 2 tarjetas, presupuesto meta y 3 metas). ¿Continuar?'))return;
- S=defaults();S._ts=Date.now();persist();renderAll();pushCloud();
+ copiaAntes('cargar el plan de ejemplo');S=defaults();S._ts=Date.now();persist();renderAll();pushCloud();
  alert('Datos del plan cargados. Revisa la pestaña Deudas y ajusta las líneas de crédito de tus tarjetas.');}
 function importBackup(){document.getElementById('bkFile').click();}
 function onBackupFile(inp){const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();
  r.onload=()=>{try{const d=JSON.parse(r.result);
    if(!d||typeof d!=='object'||!Array.isArray(d.categorias))throw new Error('formato');
-   if(!confirm('Reemplazar todos tus datos actuales por el contenido de "'+f.name+'"?'))return;
-   S=migrate(d);S._ts=Date.now();persist();renderAll();pushCloud();
-   alert('Copia restaurada correctamente.');
+   reemplazarEstado(d,'restaurar copia','¿Reemplazar todo por "'+f.name+'"?',
+     ()=>{ pushCloud(); },
+     true);   /* fecha de AHORA: si no, la nube se lo volvería a comer */
   }catch(e){alert('No se pudo leer el archivo. Debe ser un JSON exportado por esta misma app.');}
   finally{inp.value='';}};
  r.onerror=()=>{alert('No se pudo leer el archivo.');inp.value='';};
  r.readAsText(f);}
+/* ---------- red de seguridad antes de pisar los datos ----------
+   Cargar de la nube, restaurar un JSON y reiniciar REEMPLAZAN todo. Antes
+   ninguna de las tres preguntaba nada ni dejaba volver: abrir la app en la
+   tablet y tocar "Cargar de la nube" bastaba para perder el trabajo del día.
+   Ahora las tres guardan una copia local primero, y preguntan mostrando lo
+   que se va a perder. La copia vive aparte de los datos, así que sobrevive a
+   que los datos se pisen. */
+const ANTES_KEY='finanzas50b_antes', ANTES_MAX=3;
+
+/** Un resumen entendible de un estado, para poder comparar dos. */
+function resumenEstado(x){
+ const tx=(x&&x.tx)||[]; let f='';
+ try{ if(x&&x._ts) f=new Date(+x._ts).toLocaleString('es-PE',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}); }catch(e){}
+ return {n:tx.length, cuentas:((x&&x.cuentas)||[]).length, fecha:f, ts:+(x&&x._ts)||0};
+}
+function copiasAntes(){try{return JSON.parse(localStorage.getItem(ANTES_KEY)||'[]');}catch(e){return [];}}
+/** Guarda cómo estaban las cosas justo antes de reemplazarlas. */
+function copiaAntes(motivo){
+ try{
+  const l=copiasAntes();
+  l.unshift({ts:Date.now(), motivo:motivo||'', resumen:resumenEstado(S), datos:JSON.stringify(S)});
+  localStorage.setItem(ANTES_KEY, JSON.stringify(l.slice(0,ANTES_MAX)));
+ }catch(e){ /* sin espacio: no se bloquea la operación por esto */ }
+}
+/** Devuelve los datos a como estaban antes de la última carga. */
+function volverACopia(i){
+ const l=copiasAntes(), c=l[i||0]; if(!c) return false;
+ S=migrate(JSON.parse(c.datos)); S._ts=Date.now();
+ localStorage.setItem(ANTES_KEY, JSON.stringify(l.slice((i||0)+1)));
+ persist(); renderAll(); pushCloud();
+ return true;
+}
+
+/** Pregunta antes de algo que no se puede deshacer solo. NEXO le pone su
+    propia hoja; sin NEXO cae al confirm() del navegador. */
+function pedirOk(o, seguir){
+ if(typeof window.nxConfirmar==='function'){ window.nxConfirmar(o, seguir); return; }
+ if(confirm(o.titulo+(o.texto?'\n\n'+o.texto:''))) seguir();
+}
+
+/** Reemplaza el estado por otro, con red: pregunta y deja copia. */
+function reemplazarEstado(d, motivo, titulo, alTerminar, tsNuevo){
+ const a=resumenEstado(S), b=resumenEstado(d);
+ const texto='Ahora tienes '+a.n+' movimientos'+(a.fecha?' ('+a.fecha+')':'')+'.\n'+
+   'Vas a quedarte con '+b.n+(b.fecha?' ('+b.fecha+')':'')+'.\n\n'+
+   (b.ts&&a.ts&&b.ts<a.ts ? 'Ojo: lo que vas a cargar es MÁS VIEJO que lo que tienes.\n\n' : '')+
+   'Se guarda una copia de lo de ahora, y puedes volver desde Copias y datos.';
+ pedirOk({titulo:titulo, texto:texto, boton:'Sí, reemplazar',
+   html:'<div class="cifras"><span class="fl">movimientos</span><span class="a">'+a.n+
+        '</span><span class="fl">→</span><span class="b">'+b.n+'</span></div>'+
+        (a.fecha?'<p style="margin:8px 0 0">Lo de ahora es del <b>'+a.fecha+'</b>.</p>':'')+
+        (b.fecha?'<p style="margin:2px 0 0">Lo que entra es del <b>'+b.fecha+'</b>.</p>':'')+
+        (b.ts&&a.ts&&b.ts<a.ts?'<p style="margin:8px 0 0"><b>Ojo: lo que entra es más viejo que lo que tienes.</b></p>':'')+
+        '<p style="margin:8px 0 0">Se guarda una copia de lo de ahora. Puedes volver desde Copias y datos.</p>'
+ }, function(){
+  copiaAntes(motivo);
+  S=migrate(d); S._ts=tsNuevo?Date.now():(d._ts||Date.now());
+  persist(); generateRecurrentes(); renderAll();
+  if(typeof alTerminar==='function') alTerminar();
+ });
+}
+
 function exportData(){const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='finanzas_backup.json';a.click();}
 function blank(){const b=defaults();b.cfg.titular='';b.tx=[];b.tarjetas=[];b.loans=[];b.metas=[];b.recurrentes=[];b.extra=0;
  b.categorias.forEach(c=>{c.limite=0;});return b;}
-function resetAll(){if(confirm('¿Reiniciar todo a cero? Se borran tus movimientos, deudas, metas y límites. Los datos del plan puedes volver a cargarlos con el botón de al lado.')){S=migrate(blank());save();}}
+function resetAll(){if(confirm('¿Reiniciar todo a cero? Se borran tus movimientos, deudas, metas y límites. Los datos del plan puedes volver a cargarlos con el botón de al lado.')){copiaAntes('reiniciar todo');S=migrate(blank());save();}}
 generateRecurrentes();syncMovForm();renderAll();
 </script>
 <script>
@@ -3190,6 +3277,6 @@ addEventListener('load',()=>{
  try{ pintarTodo(); }catch(e){ console.warn('v3.6.0:',e); }
 })();
 </script>
-<script src="nx.js?v=485"></script>
+<script src="nx.js?v=486"></script>
 </body>
 </html>

@@ -2639,6 +2639,14 @@
   }).finally(()=>contadorOff());
  }
 
+ /* El motor pregunta por aquí antes de pisar los datos (cargar de la nube,
+    restaurar un archivo). Lo llama por window para no depender de NEXO: si un
+    día esto no está, cae al confirm() del navegador y la protección sigue. */
+ window.nxConfirmar=function(o,seguir){
+  confirmar({titulo:o.titulo||'¿Seguro?', boton:o.boton||'Sí, continuar',
+    detalle:o.html||('<p>'+h(o.texto||'')+'</p>')}, seguir);
+ };
+
  /* ---- los dos extremos de un traslado ----
     El lector manda tokens, no cuentas: 'cta:2033' o 'wardadito:Viaje'. Él no
     sabe qué cuentas hay en la app, así que las resuelve ella.
@@ -3449,7 +3457,44 @@
    '<div style="font-size:11.5px;color:var(--nx-mut);margin:10px 2px 0">Tu copia es un archivo '+
     'JSON: guárdalo donde tú puedas volver a encontrarlo. El código de la app es público, '+
     'así que tus cifras no viven ahí.</div>'+
+   (function(){
+     /* Lo que había justo antes de la última carga. Existe porque abrir la app
+        en otro aparato y tocar "Cargar de la nube" bastaba para perder el día. */
+     const l=(typeof copiasAntes==='function'?copiasAntes():[]);
+     if(!l.length) return '';
+     return '<div class="nx-st" style="margin-top:22px"><h3>Volver atrás</h3></div>'+
+      '<div class="nx-box">'+l.map((c,i)=>{
+       let cuando=''; try{ cuando=new Date(c.ts).toLocaleString('es-PE',
+         {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){}
+       return '<button class="nx-row" data-antes="'+i+'"><span class="av">↩️</span>'+
+        '<span class="tx"><b>'+h(c.motivo||'antes de una carga')+'</b><span>'+
+        h(cuando)+' · '+((c.resumen&&c.resumen.n)||0)+' movimientos</span></span>'+
+        '<span class="ar">›</span></button>';
+      }).join('')+'</div>'+
+      '<div style="font-size:11.5px;color:var(--nx-mut);margin:8px 2px 0">Cada vez que algo '+
+       'reemplaza tus datos se guarda cómo estaban antes. Esto no toca la nube hasta que elijas.</div>';
+   })()+
    '<button class="nx-go mal" onclick="resetAll()" style="margin-top:22px">Reiniciar todo</button></div>';
+ },wire(){
+  document.querySelectorAll('#nx-body [data-antes]').forEach(b=>b.onclick=()=>{
+   const i=+b.dataset.antes, l=copiasAntes(), c=l[i]; if(!c) return;
+   const ahora=(S.tx||[]).length;
+   confirmar({titulo:'¿Volver a como estaba?', boton:'Sí, volver',
+    detalle:'<div class="cifras"><span class="fl">movimientos</span>'+
+      '<span class="a">'+ahora+'</span><span class="fl">→</span>'+
+      '<span class="b">'+((c.resumen&&c.resumen.n)||0)+'</span></div>'+
+      '<p style="margin:8px 0 0">Vuelve a como estaba antes de <b>'+h(c.motivo||'esa carga')+
+      '</b>, y se sube a la nube para que los demás aparatos queden igual.</p>'
+   },()=>{
+    const antes=JSON.stringify(S);
+    vib(18);
+    if(volverACopia(i)){
+     toast('Datos restaurados','Volviste a '+((c.resumen&&c.resumen.n)||0)+' movimientos',
+       ()=>{ revertir(antes); toast('Se quedó como estaba','',null); });
+    }
+    pinta(0);
+   });
+  });
  }};
  P.p_acerca={html(){
   return barraTop('Acerca de','Versión y datos')+'<div class="nx-scroll"><div class="nx-box nxp">'+

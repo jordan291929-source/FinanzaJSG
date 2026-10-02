@@ -27,6 +27,13 @@ const ARCHIVO = 'finanzas-datos.json';
 /** Días que se conservan los respaldos diarios automáticos. */
 const DIAS_BACKUP = 60;
 
+/** Cuántas versiones recientes (con hora) se guardan además de la del día. */
+const RECIENTES = 12;
+
+/** Margen de reloj entre aparatos antes de considerar que un guardado llega
+ *  atrasado. Dos minutos: el caso real son DÍAS de diferencia, no minutos. */
+const MARGEN_RELOJ_MS = 120000;
+
 /* ============================== ENDPOINTS ============================== */
 
 function doGet(e) {
@@ -69,6 +76,24 @@ function guardar_(cuerpo, d) {
   try {
     const carpeta = carpeta_();
     const f = archivo_();
+
+    /* Un aparato atrasado no pisa al que está al día.
+       Paso de verdad: se abrió la app en la tablet, que tenía datos de hace
+       días, y al tocar cualquier cosa subió ESO con fecha de ahora. A partir de
+       ahí lo viejo era "lo más nuevo" y el celular se lo tragaba en la
+       siguiente carga. El servidor es el único sitio que ve las dos fechas,
+       así que la comprobación va aquí.
+       Con `forzar` se puede pasar por encima a propósito. */
+    if (f && !d.forzar) {
+      const previo = tsGuardado_(f), llega = +(d && d._ts) || 0;
+      if (previo && llega && llega < previo - MARGEN_RELOJ_MS) {
+        return json_({ ok: false, error: 'mas-viejo', nube: previo, enviado: llega });
+      }
+    }
+
+    /* `forzar` es una orden del usuario, no un dato suyo: no se guarda. */
+    if (d.forzar) { delete d.forzar; cuerpo = JSON.stringify(d); }
+
     if (f) f.setContent(cuerpo);
     else carpeta.createFile(ARCHIVO, cuerpo, MimeType.PLAIN_TEXT);
 
@@ -81,26 +106,54 @@ function guardar_(cuerpo, d) {
   }
 }
 
-/** Un respaldo por día. Protege del caso peor: si la app borra tus datos,
- *  el guardado automático también pisaría la copia de la nube. */
+/** La fecha del estado que ya está guardado en la nube. */
+function tsGuardado_(f) {
+  try { return +(JSON.parse(f.getBlob().getDataAsString('UTF-8'))._ts) || 0; }
+  catch (e) { return 0; }
+}
+
+/** Respaldos automáticos, en dos niveles.
+ *
+ *  backup-AAAA-MM-DD.json : cómo empezó cada día, 60 días. NO se sobrescribe.
+ *    Antes sí: cada guardado pisaba el del día, así que un accidente a media
+ *    mañana se llevaba por delante el respaldo de esa misma mañana. Ahora el
+ *    primer guardado del día queda intacto pase lo que pase.
+ *
+ *  reciente-AAAA-MM-DD-HHmm.json : las últimas 12 versiones, para volver a
+ *    hace un rato y no sólo al principio del día.
+ */
 function respaldoDiario_(carpeta, cuerpo) {
   const zona = Session.getScriptTimeZone() || 'America/Lima';
-  const hoy = Utilities.formatDate(new Date(), zona, 'yyyy-MM-dd');
-  const nombre = 'backup-' + hoy + '.json';
+  const ahora = new Date();
+  const hoy = Utilities.formatDate(ahora, zona, 'yyyy-MM-dd');
 
-  const it = carpeta.getFilesByName(nombre);
-  if (it.hasNext()) it.next().setContent(cuerpo);
-  else carpeta.createFile(nombre, cuerpo, MimeType.PLAIN_TEXT);
-
-  // Limpieza de respaldos viejos
-  const corte = Date.now() - DIAS_BACKUP * 86400000;
-  const viejos = carpeta.getFilesByType(MimeType.PLAIN_TEXT);
-  while (viejos.hasNext()) {
-    const v = viejos.next();
-    if (v.getName().indexOf('backup-') === 0 && v.getDateCreated().getTime() < corte) {
-      v.setTrashed(true);
-    }
+  const diario = 'backup-' + hoy + '.json';
+  if (!carpeta.getFilesByName(diario).hasNext()) {
+    carpeta.createFile(diario, cuerpo, MimeType.PLAIN_TEXT);
   }
+
+  const sello = Utilities.formatDate(ahora, zona, 'yyyy-MM-dd-HHmm');
+  const reciente = 'reciente-' + sello + '.json';
+  const ir = carpeta.getFilesByName(reciente);
+  if (ir.hasNext()) ir.next().setContent(cuerpo);
+  else carpeta.createFile(reciente, cuerpo, MimeType.PLAIN_TEXT);
+
+  limpiar_(carpeta);
+}
+
+/** Tira los diarios de más de DIAS_BACKUP y deja sólo los RECIENTES últimos. */
+function limpiar_(carpeta) {
+  const corte = Date.now() - DIAS_BACKUP * 86400000;
+  const recientes = [];
+  const it = carpeta.getFilesByType(MimeType.PLAIN_TEXT);
+  while (it.hasNext()) {
+    const v = it.next(), n = v.getName();
+    if (n.indexOf('backup-') === 0 && v.getDateCreated().getTime() < corte) v.setTrashed(true);
+    else if (n.indexOf('reciente-') === 0) recientes.push(v);
+  }
+  // el nombre lleva la fecha, así que ordenar por nombre es ordenar por hora
+  recientes.sort(function (a, b) { return a.getName() < b.getName() ? 1 : -1; });
+  recientes.slice(RECIENTES).forEach(function (v) { v.setTrashed(true); });
 }
 
 /* ================================ CORREO =============================== */
