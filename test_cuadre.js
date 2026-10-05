@@ -169,6 +169,34 @@ const chk = (q, real, esp) => {
   chk('no deja movimientos sueltos tras rechazar', S.tx.length, 2);
 }
 
+/* ---------- 7. un traslado no es plata que salió de tu bolsillo ---------- */
+{
+  const S = base(), m = cargar(S);
+  S.cuentas.push({id: 4, nombre: 'Wardadito Viaje'});
+  chk('antes · lo que salió de caja en octubre', m.cashOutMes(2026, 10), 20);
+  m.addTraslado(2, 4, 500, '2026-10-05');
+  /* contaba como egreso mientras el otro lado NO contaba como ingreso:
+     el mes entero parecía gastado */
+  chk('mover 500 entre tus cuentas no es egreso', m.cashOutMes(2026, 10), 20);
+  chk('ni ingreso', m.ingresoRealMes(2026, 10), 0);
+  chk('ni gasto del mes', m.gastoMes(2026, 10), 20);
+}
+
+/* ---------- 8. el mismo correo no se anota dos veces ---------- */
+{
+  const S = base(), m = cargar(S);
+  S.cuentas.push({id: 4, nombre: 'Wardadito Viaje'});
+  const uno = m.addTraslado(2, 4, 500, '2026-10-05', '', 'bcp-12345');
+  chk('el primero entra', !!uno, true);
+  const dos = m.addTraslado(2, 4, 500, '2026-10-05', '', 'bcp-12345');
+  chk('el mismo correo otra vez se rechaza', dos, null);
+  chk('y no quedan movimientos de más', S.tx.filter(t => t.cuadre === 'traslado').length, 2);
+  chk('la cuenta se movió una sola vez', m.saldoCuenta(4), 500);
+  /* otro correo distinto sí puede ser el mismo monto el mismo día */
+  chk('otro correo con el mismo monto sí entra',
+      !!m.addTraslado(2, 4, 500, '2026-10-05', '', 'bcp-99999'), true);
+}
+
 console.log('');
 if (fallas.length) { console.log('FALLA\n- ' + fallas.join('\n- ')); process.exit(1); }
 console.log('TODO BIEN · el cuadre corrige y no se cuela en ninguna suma');
