@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="fonts/inter.css">
-<link rel="stylesheet" href="nx.css?v=486">
+<link rel="stylesheet" href="nx.css?v=487">
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/jspdf.plugin.autotable.min.js"></script>
@@ -1038,7 +1038,7 @@ const newId=()=>Date.now()+Math.floor(Math.random()*1000);
 const SUGS={'Alimentación':['Menú','Almuerzo','PedidosYa','Rappi','Mercado','Supermercado','Café'],'Transporte':['Uber','InDrive','Taxi','Combi/Bus','Gasolina','Pasaje'],'Gym / Deporte':['Gym','Mensualidad gym','Deporte'],'iCloud':['iCloud'],'Claro':['Recarga Claro','Plan Claro'],'Movistar':['Plan Movistar','Recarga Movistar'],'Vivienda / Alquiler':['Alquiler','Mantenimiento','Arbitrios'],'Pago de deudas':['Pago tarjeta','Pago préstamo','Cuota'],'Restaurantes / Salidas':['Restaurante','Cena','Bar','Café','Delivery'],'Entretenimiento':['Cine','Netflix','Spotify','Streaming','Salida','Juegos'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Otros','Regalo','Imprevisto'],'Ahorro / Fondo':['Ahorro','Fondo de emergencia'],'Aporte a metas':['Aporte meta']};
 function defaultSugs(n){return SUGS[n]||[];}
 const SUGS_INGRESO=['Sueldo','Gratificación','CTS','Bono','Préstamo recibido','Regalo','Reembolso','Venta','Intereses','Otros'];
-const APP_VERSION='4.8.6'; // se actualiza con cada mejora del sistema
+const APP_VERSION='4.8.7'; // se actualiza con cada mejora del sistema
 /* un `const` de nivel superior NO queda en window, y por eso la versión salía
    vacía en Perfil y en Acerca de. Se expone a mano. */
 window.APP_VERSION=APP_VERSION;
@@ -1219,7 +1219,10 @@ const esDeuda=t=>{const c=catById(t.catId);return !!(c&&c.auto==='deuda');}; // 
 function esCuadre(t){return !!(t&&t.cuadre);}
 function cuadreSinCaja(t){return !!(t&&t.cuadre==='deuda');}
 function gastoMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!esDeuda(t)&&!esCuadre(t)).reduce((a,b)=>a+(+b.monto||0),0);}
-function cashOutMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!t.cardId&&!cuadreSinCaja(t)).reduce((a,b)=>a+(+b.monto||0),0);}
+/* Un traslado saca plata de una cuenta y la mete en otra: no sale de tu bolsillo.
+   Contaba como egreso mientras el otro lado NO contaba como ingreso, así que el
+   mes parecía gastado. Ningún cuadre entra aquí. */
+function cashOutMes(y,mn){return S.tx.filter(t=>t.tipo==='Gasto'&&inMonth(t,y,mn)&&!t.cardId&&!esCuadre(t)).reduce((a,b)=>a+(+b.monto||0),0);}
 function ingresoRealMes(y,mn){return S.tx.filter(t=>t.tipo==='Ingreso'&&inMonth(t,y,mn)&&!esCuadre(t)).reduce((a,b)=>a+(+b.monto||0),0);}
 function saldoHasta(y,mn){const end=monthNum(y,mn);let s=+S.cfg.saldoIni||0;S.tx.forEach(t=>{if(cuadreSinCaja(t))return;const d=new Date(t.fecha+'T00:00');if(monthNum(d.getFullYear(),d.getMonth()+1)<=end){if(t.tipo==='Ingreso')s+=+t.monto||0;else if(!t.cardId)s-=+t.monto||0;}});return s;}
 /* ---------- lo estimado va aparte de lo exacto ----------
@@ -1598,6 +1601,10 @@ function addTraslado(deId,aId,monto,fecha,concepto,correoK){
  if(!(mo>0)||!a||!b||a===b) return null;
  const cde=ctaById(a), cha=ctaById(b);
  if(!cde||!cha) return null;
+ /* el mismo correo no puede anotarse dos veces. La pantalla ya saca el aviso de
+    la bandeja al anotarlo, pero eso falló una vez y se duplicó el traslado: el
+    motor tiene que negarse solo, sin depender de que la pantalla acierte. */
+ if(correoK && (S.tx||[]).some(t=>t.correoK===correoK && t.cuadre==='traslado')) return null;
  const f=fecha||keyOf(new Date());
  const rot=concepto||('Traslado · '+cde.nombre+' → '+cha.nombre);
  const par=newId();
@@ -3277,6 +3284,6 @@ addEventListener('load',()=>{
  try{ pintarTodo(); }catch(e){ console.warn('v3.6.0:',e); }
 })();
 </script>
-<script src="nx.js?v=486"></script>
+<script src="nx.js?v=487"></script>
 </body>
 </html>

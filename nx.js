@@ -276,13 +276,17 @@
 
  function filaTx(t){
   const ing=t.tipo==='Ingreso', c=catById(t.catId);
-  const cat=c?c.nombre.split(' (')[0]:(ing?'Ingreso':'Gasto');
+  /* un traslado no es gasto ni ingreso: ni se pinta en rojo ni en verde, y se
+     nombra por lo que es. Las dos mitades se distinguen por la cuenta. */
+  const cu=esCuadre(t), rotCu=(t.cuadre==='traslado'?'Traslado':'Cuadre');
+  const cat=cu?rotCu:(c?c.nombre.split(' (')[0]:(ing?'Ingreso':'Gasto'));
   const medio=t.cardId?((S.tarjetas.find(x=>x.id===t.cardId)||{}).nombre||'Tarjeta')
             :((ctaById(t.cuentaId)||{}).nombre||'');
   return '<button class="nx-row" data-go="txd" data-id="'+t.id+'">'+
-   '<span class="av">'+(c&&c.icono?c.icono:emo(cat+' '+(t.concepto||'')))+'</span>'+
+   '<span class="av">'+(cu?'🔁':(c&&c.icono?c.icono:emo(cat+' '+(t.concepto||''))))+'</span>'+
    '<span class="tx"><b>'+h(t.concepto||'—')+'</b><span>'+h(cat)+' · '+etiquetaFecha(t.fecha)+'</span></span>'+
-   '<span class="am"><b class="'+(ing?'nx-in':'nx-out')+'">'+(ing?'+ ':'− ')+fmt2(t.monto)+'</b>'+
+   '<span class="am"><b class="'+(cu?'':(ing?'nx-in':'nx-out'))+'">'+
+     (cu?(ing?'↘ ':'↗ '):(ing?'+ ':'− '))+fmt2(t.monto)+'</b>'+
    (medio?'<span>'+h(medio)+'</span>':'')+'</span></button>';
  }
 
@@ -640,7 +644,8 @@
   const m=mesSel(), y=m.y, mn=m.mn;
   let lista=txMes(y,mn);
   if(movFiltro==='ingresos') lista=lista.filter(t=>t.tipo==='Ingreso');
-  if(movFiltro==='gastos')   lista=lista.filter(t=>t.tipo==='Gasto'&&!t.payCardId&&!t.payLoanId);
+  if(movFiltro==='gastos')   lista=lista.filter(t=>t.tipo==='Gasto'&&!t.payCardId&&!t.payLoanId&&!esCuadre(t));
+  if(movFiltro==='traslados')lista=lista.filter(t=>esCuadre(t));
   if(movFiltro==='tarjeta')  lista=lista.filter(t=>t.cardId);
   if(movFiltro==='deudas')   lista=lista.filter(t=>t.payCardId||t.payLoanId);
   if(movQ){ const q=movQ.toLowerCase();
@@ -653,7 +658,7 @@
    '<div class="nx-scroll">'+
    '<div class="nx-search">🔍<input id="nxQ" placeholder="Buscar movimiento" value="'+h(movQ)+'"></div>'+
    '<div class="nx-chips">'+chip('todos','Todos')+chip('ingresos','Ingresos')+chip('gastos','Gastos')+
-     chip('tarjeta','Tarjeta')+chip('deudas','Deudas')+'</div>'+
+     chip('tarjeta','Tarjeta')+chip('deudas','Deudas')+chip('traslados','Traslados')+'</div>'+
    '<div class="nx-st"><h3 style="font-size:12.5px;font-weight:600;color:var(--nx-mut)">'+lista.length+' movimiento'+(lista.length===1?'':'s')+'</h3>'+
      '<span style="font-size:12.5px;font-weight:600;color:'+(neto>=0?'var(--nx-pos)':'var(--nx-neg)')+'">Neto '+(neto>=0?'+ ':'− ')+fmt2(Math.abs(neto))+'</span></div>'+
    '<div class="nx-box">'+(lista.length?lista.map(filaTx).join(''):'<div class="nx-empty">Nada con ese filtro.</div>')+'</div>'+
@@ -684,6 +689,7 @@
     kv('Categoría',h(c?c.nombre:'—'))+
     kv('Medio',h(medio))+
     (t.cuotas>1?kv('Cuotas',t.cuotas):'')+
+    (esCuadre(t)?kv('Tipo',t.cuadre==='traslado'?'Traslado entre tus cuentas':'Cuadre'):'')+
     (t.payCardId||t.payLoanId?kv('Tipo','Pago de deuda'):'')+
     (+t.montoUsd>0?kv('En dólares','US$ '+(+t.montoUsd).toFixed(2))+
       kv('Tipo de cambio aplicado','S/ '+(+t.tc||0).toFixed(4))+
@@ -3309,11 +3315,16 @@
    },()=>{
     vib(18);
     addTraslado(t.de,t.a,mo,m.fecha,m.concepto||'',m.id);   // ← motor
+    /* sacarlo de la lista de aquí, no sólo marcarlo en el servidor: si no, el
+       correo sigue en pantalla y volver a tocarlo anota el traslado otra vez. */
     archivarCorreos([m.id]);
+    bnd.items=bnd.items.filter(x=>x.id!==m.id);
+    bndCache().n=bnd.items.length;
     delete trasSel[m.id];
+    save(); pinta(0);
     toast('Traslado anotado',cde.nombre+' → '+cha.nombre,
-      ()=>{ revertir(antes); toast('Traslado deshecho','',null); });
-    pinta(0);
+      ()=>{ revertir(antes,()=>{ desarchivarCorreos([m.id]); });
+            toast('Traslado deshecho','Te lo devolví a la bandeja',null); });
    });
   });
 
